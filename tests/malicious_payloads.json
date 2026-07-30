@@ -1,0 +1,54 @@
+[
+  {
+    "name": "DoS SYN Flood (Critical)",
+    "payload": {
+      "timestamp": "2026-07-30T22:46:00Z",
+      "src_ip": "1.2.3.4",
+      "dest_ip": "10.0.0.5",
+      "src_port": 12345,
+      "dest_port": 80,
+      "protocol": "TCP",
+      "packet_count": 50000,
+      "flow_duration": 0.5
+    }
+  },
+  {
+    "name": "Dictionary Brute Force (High)",
+    "payload": {
+      "timestamp": "2026-07-30T22:46:00Z",
+      "src_ip": "192.168.1.100",
+      "dest_ip": "10.0.0.5",
+      "src_port": 52172,
+      "dest_port": 22,
+      "protocol": "TCP",
+      "packet_count": 502,
+      "flow_duration": 3618.0
+    }
+  },
+  {
+    "name": "DoS UDP Flood (Critical)",
+    "payload": {
+      "timestamp": "2026-07-30T22:46:00Z",
+      "src_ip": "185.199.110.153",
+      "dest_ip": "10.0.0.5",
+      "src_port": 65535,
+      "dest_port": 443,
+      "protocol": "UDP",
+      "packet_count": 5000000,
+      "flow_duration": 0.45
+    }
+  },
+  {
+    "name": "Benign Traffic",
+    "payload": {
+      "timestamp": "2026-07-30T22:46:00Z",
+      "src_ip": "192.168.1.25",
+      "dest_ip": "10.0.0.5",
+      "src_port": 51324,
+      "dest_port": 443,
+      "protocol": "TCP",
+      "packet_count": 42,
+      "flow_duration": 15.3
+    }
+  }
+]
