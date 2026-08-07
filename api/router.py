@@ -3,13 +3,11 @@ from fastapi.responses import RedirectResponse
 from typing import List, Dict, Any
 from api.schemas import NetworkFlow, TrafficPrediction, DecisionResponse
 from core.engine import DecisionManager
-from ml.predictor import TrafficPredictor
 from models.enums import IncidentStatus
 
 app = FastAPI(title="Smart SOC Decision Engine", version="2.0.0")
 
 decision_manager = DecisionManager()
-predictor = TrafficPredictor()
 
 # In-memory DB for incidents
 INCIDENTS_DB: Dict[str, DecisionResponse] = {}
@@ -20,26 +18,13 @@ async def root():
     return RedirectResponse(url="/docs")
 
 @app.post("/api/v1/decision/analyze", response_model=DecisionResponse)
-async def analyze_traffic(flow: NetworkFlow):
+async def analyze_traffic(prediction: TrafficPrediction):
     """
-    Ingests raw network flow data, runs ML inference, and computes the SOC decision.
+    Ingests ML prediction and computes the SOC decision.
     """
-    # 1. ML Inference
-    attack_type, confidence = predictor.predict(
-        src_port=flow.src_port,
-        dest_port=flow.dest_port,
-        protocol_str=flow.protocol,
-        packet_count=flow.packet_count,
-        flow_duration=flow.flow_duration
-    )
+    flow = prediction.flow_context
     
-    prediction = TrafficPrediction(
-        attack_type=attack_type,
-        confidence=confidence,
-        flow_context=flow
-    )
-    
-    # 2. Decision Engine Processing
+    # 1. Decision Engine Processing
     decision = decision_manager.process(prediction)
     
     # 3. Store Incident
