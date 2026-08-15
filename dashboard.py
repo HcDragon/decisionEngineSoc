@@ -72,7 +72,16 @@ def simulate_traffic():
         {"src_port": 33333, "dest_port": 443, "protocol": "TCP", "packet_count": 50, "flow_duration": 1.0},    # Benign
     ]
     flow = random.choice(scenarios)
-    payload = {
+    if flow["dest_port"] == 80:
+        attack_type = "DoS SYN Flood"
+    elif flow["dest_port"] == 53:
+        attack_type = "DNS Flood"
+    elif flow["dest_port"] == 22:
+        attack_type = "Brute Force"
+    else:
+        attack_type = "Benign"
+
+    network_flow = {
         "timestamp": datetime.utcnow().isoformat() + "Z",
         "src_ip": f"{random.randint(1,255)}.{random.randint(1,255)}.{random.randint(1,255)}.{random.randint(1,255)}",
         "dest_ip": "10.0.0.5",
@@ -81,6 +90,12 @@ def simulate_traffic():
         "protocol": flow["protocol"],
         "packet_count": flow["packet_count"],
         "flow_duration": flow["flow_duration"]
+    }
+
+    payload = {
+        "attack_type": attack_type,
+        "confidence": round(random.uniform(85.0, 99.9), 2),
+        "flow_context": network_flow
     }
     
     with st.spinner("Analyzing Network Flow via ML..."):
