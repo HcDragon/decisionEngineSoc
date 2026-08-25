@@ -1,0 +1,16 @@
+policy_id: "POL-NET-000-BENIGN"
+name: "Benign Traffic Policy"
+enabled: true
+conditions:
+  attack_type: "Benign Traffic"
+  min_confidence: 0.0
+  min_risk: 0.0
+decision:
+  severity: "LOW"
+  priority: "P4"
+  automation_level: 0
+  analyst_required: false
+playbook:
+  id: "PB-NET-000-BENIGN"
+actions:
+  - "LOG_ONLY"

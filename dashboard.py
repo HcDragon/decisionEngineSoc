@@ -64,24 +64,17 @@ def approve_incident(incident_id):
         st.error(f"Error: {e}")
 
 def simulate_traffic():
-    # Randomly pick an attack scenario to simulate
     scenarios = [
-        {"src_port": 12345, "dest_port": 80, "protocol": "TCP", "packet_count": 15000, "flow_duration": 2.5},  # SYN Flood
-        {"src_port": 54321, "dest_port": 53, "protocol": "UDP", "packet_count": 8000, "flow_duration": 1.2},   # DNS Flood
-        {"src_port": 11111, "dest_port": 22, "protocol": "TCP", "packet_count": 500, "flow_duration": 30.0},   # Brute Force
-        {"src_port": 33333, "dest_port": 443, "protocol": "TCP", "packet_count": 50, "flow_duration": 1.0},    # Benign
+        {"attack_type": "DoS SYN Flood",         "src_port": 12345, "dest_port": 80,  "protocol": "TCP", "packet_count": 15000, "flow_duration": 2.5},
+        {"attack_type": "DoS DNS Flood",          "src_port": 54321, "dest_port": 53,  "protocol": "UDP", "packet_count": 8000,  "flow_duration": 1.2},
+        {"attack_type": "Dictionary Brute Force", "src_port": 11111, "dest_port": 22,  "protocol": "TCP", "packet_count": 500,   "flow_duration": 30.0},
+        {"attack_type": "Benign Traffic",         "src_port": 33333, "dest_port": 443, "protocol": "TCP", "packet_count": 50,    "flow_duration": 1.0},
     ]
     flow = random.choice(scenarios)
-    if flow["dest_port"] == 80:
-        attack_type = "DoS SYN Flood"
-    elif flow["dest_port"] == 53:
-        attack_type = "DNS Flood"
-    elif flow["dest_port"] == 22:
-        attack_type = "Brute Force"
-    else:
-        attack_type = "Benign"
 
-    network_flow = {
+    payload = {
+        "attack_type": flow["attack_type"],
+        "confidence": round(random.uniform(85.0, 99.9), 2),
         "timestamp": datetime.utcnow().isoformat() + "Z",
         "src_ip": f"{random.randint(1,255)}.{random.randint(1,255)}.{random.randint(1,255)}.{random.randint(1,255)}",
         "dest_ip": "10.0.0.5",
@@ -89,13 +82,7 @@ def simulate_traffic():
         "dest_port": flow["dest_port"],
         "protocol": flow["protocol"],
         "packet_count": flow["packet_count"],
-        "flow_duration": flow["flow_duration"]
-    }
-
-    payload = {
-        "attack_type": attack_type,
-        "confidence": round(random.uniform(85.0, 99.9), 2),
-        "flow_context": network_flow
+        "flow_duration": flow["flow_duration"],
     }
     
     with st.spinner("Analyzing Network Flow via ML..."):

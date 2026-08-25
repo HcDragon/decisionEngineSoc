@@ -18,11 +18,13 @@ def test_root_redirect():
 def test_analyze_traffic():
     payload = {
         "timestamp": "2026-07-30T22:46:00Z",
+        "attack_type": "DoS UDP Flood",
+        "confidence": 0.99,
         "src_ip": "1.2.3.4",
         "dest_ip": "10.0.0.5",
         "src_port": 12345,
         "dest_port": 80,
-        "protocol": "TCP",
+        "protocol": "UDP",
         "packet_count": 15000,
         "flow_duration": 2.5
     }

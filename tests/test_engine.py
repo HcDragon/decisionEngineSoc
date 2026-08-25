@@ -1,14 +1,16 @@
 import pytest
 from core.engine import DecisionManager
-from api.schemas import TrafficPrediction, NetworkFlow
+from api.schemas import TrafficPrediction
 
 @pytest.fixture
 def manager():
     return DecisionManager()
 
 def test_decision_manager_auto_mitigate(manager):
-    flow = NetworkFlow(
+    prediction = TrafficPrediction(
         timestamp="2026-07-30T22:46:00Z",
+        attack_type="Dictionary Brute Force",
+        confidence=0.99,
         src_ip="192.168.1.100",
         dest_ip="10.0.0.5",
         src_port=52172,
@@ -16,11 +18,6 @@ def test_decision_manager_auto_mitigate(manager):
         protocol="TCP",
         packet_count=502,
         flow_duration=3618.0
-    )
-    prediction = TrafficPrediction(
-        attack_type="Dictionary Brute Force",
-        confidence=0.99,
-        flow_context=flow
     )
     
     decision = manager.process(prediction)

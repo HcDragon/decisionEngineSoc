@@ -1,0 +1,17 @@
+policy_id: "POL-ID-001-BRUTEFORCE"
+name: "Brute Force Response Policy"
+enabled: true
+conditions:
+  attack_type: "Dictionary Brute Force"
+  min_confidence: 70.0
+  min_risk: 0.0
+decision:
+  severity: "HIGH"
+  priority: "P2"
+  automation_level: 4
+  analyst_required: true
+playbook:
+  id: "PB-ID-001-BRUTEFORCE"
+actions:
+  - "BLOCK_SOURCE_IP"
+  - "RESET_CREDENTIALS"

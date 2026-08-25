@@ -1,0 +1,16 @@
+policy_id: "POL-NET-002-DNS-FLOOD"
+name: "DoS DNS Flood Response Policy"
+enabled: true
+conditions:
+  attack_type: "DoS DNS Flood"
+  min_confidence: 75.0
+  min_risk: 0.0
+decision:
+  severity: "HIGH"
+  priority: "P2"
+  automation_level: 4
+  analyst_required: false
+playbook:
+  id: "PB-NET-002-DNS-FLOOD"
+actions:
+  - "RATE_LIMIT"

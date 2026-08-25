@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.responses import RedirectResponse
 from typing import List, Dict, Any
-from api.schemas import NetworkFlow, TrafficPrediction, DecisionResponse
+from api.schemas import TrafficPrediction, DecisionResponse
 from core.engine import DecisionManager
 from models.enums import IncidentStatus
 
@@ -22,8 +22,6 @@ async def analyze_traffic(prediction: TrafficPrediction):
     """
     Ingests ML prediction and computes the SOC decision.
     """
-    flow = prediction.flow_context
-    
     # 1. Decision Engine Processing
     decision = decision_manager.process(prediction)
     
@@ -32,11 +30,13 @@ async def analyze_traffic(prediction: TrafficPrediction):
     
     # 4. Print Real-Time Analysis to Terminal
     print("\n" + "="*60)
-    print(f"🚨 INCOMING TRAFFIC: {flow.src_ip}:{flow.src_port} -> {flow.dest_ip}:{flow.dest_port} ({flow.protocol})")
+    print(f"🚨 INCOMING TRAFFIC: {prediction.src_ip}:{prediction.src_port} -> {prediction.dest_ip}:{prediction.dest_port} ({prediction.protocol})")
     print(f"🧠 ML PREDICTION:   {decision.attack_type} (Confidence: {decision.confidence:.2f}%)")
     print(f"⚠️ RISK SCORE:      {decision.risk_score:.1f} | Severity: {decision.severity}")
+    print(f"📋 POLICY MATCH:    {decision.policy_id}")
     print(f"🤖 AUTO LEVEL:      {decision.automation_level} | Playbook: {decision.playbook}")
-    print(f"🛠️ ACTION TAKEN:    {decision.recommended_action}")
+    print(f"🛠️ ACTIONS:         {', '.join(decision.actions)}")
+    print(f"ℹ️  REASONS:         {'; '.join(decision.reasons)}")
     print("="*60 + "\n")
     
     return decision

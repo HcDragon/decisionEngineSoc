@@ -1,0 +1,16 @@
+policy_id: "POL-NET-003-ICMP-FLOOD"
+name: "DoS ICMP Flood Response Policy"
+enabled: true
+conditions:
+  attack_type: "DoS ICMP Flood"
+  min_confidence: 75.0
+  min_risk: 0.0
+decision:
+  severity: "HIGH"
+  priority: "P2"
+  automation_level: 4
+  analyst_required: false
+playbook:
+  id: "PB-NET-003-ICMP-FLOOD"
+actions:
+  - "BLOCK_SOURCE_IP"

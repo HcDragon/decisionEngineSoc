@@ -1,38 +1,53 @@
 import logging
+from typing import List, Dict, Any
 
 # Configure basic logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-class ActionExecutor:
+class SimulationExecutor:
     """
-    Action Simulator that mocks OS-level defense commands.
+    Action Simulator that safely mocks OS-level defense commands.
     """
-    def block_ip_firewall(self, ip: str) -> None:
-        """Simulates an iptables drop rule."""
-        logger.info(f"[EXECUTOR] Executing iptables drop for IP: {ip}")
-        print(f"🔥 [FIREWALL] IP {ip} has been blocked at the network level.")
-        
-    def apply_rate_limiting(self, ip: str) -> None:
-        """Simulates applying a rate limit."""
-        logger.info(f"[EXECUTOR] Applying rate limiting for IP: {ip}")
-        print(f"⏳ [RATE LIMIT] Traffic from IP {ip} is now rate limited.")
-        
-    def reset_user_credentials(self, ip: str) -> None:
-        """Simulates forcing a user credential reset."""
-        logger.info(f"[EXECUTOR] Resetting credentials associated with IP: {ip}")
-        print(f"🔑 [IAM] Forced password reset for accounts accessed from {ip}.")
+    def _simulate_action(self, action_name: str, ip: str, message: str) -> Dict[str, str]:
+        logger.info(f"[EXECUTOR] {message} for IP: {ip}")
+        print(f"🔧 [SIMULATION] {action_name}: {message} ({ip})")
+        return {
+            "action": action_name,
+            "mode": "SIMULATION",
+            "status": "SUCCESS",
+            "message": f"{message} for {ip}."
+        }
 
-    def execute_playbook(self, playbook: str, ip: str) -> None:
+    def execute_actions(self, actions: List[str], ip: str) -> List[Dict[str, str]]:
         """
-        Routes execution to the correct simulation methods based on the playbook.
+        Executes a list of simulated actions.
         """
-        if playbook == "BLOCK_IP":
-            self.block_ip_firewall(ip)
-        elif playbook == "RATE_LIMIT":
-            self.apply_rate_limiting(ip)
-            self.reset_user_credentials(ip)
-        elif playbook == "MANUAL_INVESTIGATION":
-            logger.info(f"[EXECUTOR] Manual investigation ticket generated for IP: {ip}")
-        else:
-            logger.info(f"[EXECUTOR] No active response defined for playbook: {playbook}")
+        results = []
+        for action in actions:
+            if action == "BLOCK_SOURCE_IP" or action == "TEMP_BLOCK_IP":
+                results.append(self._simulate_action(action, ip, "Source IP blocked at firewall"))
+            elif action == "DNS_RATE_LIMIT" or action == "UDP_RATE_LIMIT" or action == "RATE_LIMIT":
+                results.append(self._simulate_action(action, ip, "Traffic rate limited"))
+            elif action == "RESET_CREDENTIALS":
+                results.append(self._simulate_action(action, ip, "Forced password reset"))
+            elif action == "NOTIFY_SOC" or action == "NOTIFY_ANALYST":
+                results.append(self._simulate_action(action, ip, "Notification sent to SOC analyst"))
+            elif action == "CREATE_INCIDENT":
+                results.append(self._simulate_action(action, ip, "Incident ticket created in ITSM"))
+            elif action == "ICMP_FILTER" or action == "SYN_PROTECTION":
+                results.append(self._simulate_action(action, ip, "Protocol specific protection enabled"))
+            elif action == "LOG_ONLY":
+                results.append(self._simulate_action(action, ip, "Traffic logged for monitoring"))
+            else:
+                results.append({
+                    "action": action,
+                    "mode": "SIMULATION",
+                    "status": "WARNING",
+                    "message": f"Action {action} is not natively mapped to a simulation."
+                })
+        return results
+
+class ActionExecutor(SimulationExecutor):
+    # Wrapper so we don't break existing references if any, though we are actively moving to use SimulationExecutor
+    pass

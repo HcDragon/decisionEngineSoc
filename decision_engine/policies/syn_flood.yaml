@@ -1,0 +1,17 @@
+policy_id: "POL-NET-004-SYN-FLOOD"
+name: "DoS SYN Flood Response Policy"
+enabled: true
+conditions:
+  attack_type: "DoS SYN Flood"
+  min_confidence: 80.0
+  min_risk: 0.0
+decision:
+  severity: "CRITICAL"
+  priority: "P1"
+  automation_level: 5
+  analyst_required: false
+playbook:
+  id: "PB-NET-004-SYN-FLOOD"
+actions:
+  - "BLOCK_SOURCE_IP"
+  - "RATE_LIMIT"
