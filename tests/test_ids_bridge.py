@@ -11,8 +11,10 @@ def ids_bridge():
     return IDSBridge()
 
 @pytest.fixture
-def decision_manager():
-    return DecisionManager()
+def decision_manager(tmp_path):
+    from decision_engine.storage.db import Database
+    db_file = str(tmp_path / "test_ids_bridge.db")
+    return DecisionManager(db=Database(db_path=db_file))
 
 def test_ids_bridge_artifact_loading(ids_bridge):
     """Verifies that all ML artifacts and transformers are properly loaded."""

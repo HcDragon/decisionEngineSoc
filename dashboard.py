@@ -5,6 +5,7 @@ import numpy as np
 from datetime import datetime, timezone
 import json
 import time
+import threading
 
 # ---------------------------------------------------------
 # Configuration
@@ -416,6 +417,29 @@ if "sensor_paused" not in st.session_state:
     st.session_state["sensor_paused"] = False
 if "traffic_filter" not in st.session_state:
     st.session_state["traffic_filter"] = "All Flows"
+
+# Continuous Live Traffic Streamer Thread
+# Runs continuously in the background, ingesting real flows from IDSBridge
+if "live_streamer_started" not in st.session_state:
+    st.session_state["live_streamer_started"] = True
+    def _run_continuous_traffic():
+        try:
+            from decision_engine.integrations.ids_bridge import IDSBridge
+            bridge = IDSBridge()
+            if bridge.is_ready:
+                for threat_event, meta in bridge.stream_continuous(delay_seconds=1.5):
+                    if st.session_state.get("sensor_paused", False):
+                        time.sleep(0.8)
+                        continue
+                    try:
+                        api_post("decision/analyze", threat_event.model_dump())
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+    streamer_thread = threading.Thread(target=_run_continuous_traffic, daemon=True)
+    streamer_thread.start()
 
 # Query Data
 health_data = api_get("health") or {}
