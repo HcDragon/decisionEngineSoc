@@ -80,12 +80,19 @@ async def get_incident_details(incident_id: str):
     
     dec = db.get_decision(incident_id)
     audit_trail = db.get_audit_logs(incident_id=incident_id)
+    verification = db.get_verification(incident_id)
     
     return {
         "incident": inc,
         "decision": dec,
-        "audit_trail": audit_trail
+        "audit_trail": audit_trail,
+        "verification": verification
     }
+
+@app.get("/api/v1/traffic")
+async def get_recent_traffic(limit: int = Query(100, ge=1, le=500)):
+    """Retrieves recent network traffic flow records from the ingestion sensor."""
+    return db.list_threat_events(limit=limit)
 
 @app.get("/api/v1/decisions/{incident_id}")
 async def get_decision_by_incident(incident_id: str):

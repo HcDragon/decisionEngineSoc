@@ -293,6 +293,16 @@ class Database:
                 json.dumps(event_data)
             ))
 
+    def list_threat_events(self, limit: int = 100) -> List[Dict[str, Any]]:
+        conn = self._get_connection()
+        cur = conn.execute("SELECT * FROM threat_events ORDER BY timestamp DESC LIMIT ?", (limit,))
+        results = []
+        for row in cur.fetchall():
+            d = dict(row)
+            d["raw_event"] = json.loads(d["raw_event"]) if d.get("raw_event") else {}
+            results.append(d)
+        return results
+
     def save_decision(self, decision_data: Dict[str, Any]):
         conn = self._get_connection()
         with conn:
@@ -389,6 +399,16 @@ class Database:
                 ver.get("timestamp", datetime.now(timezone.utc).isoformat()),
                 json.dumps(ver.get("details", {}))
             ))
+
+    def get_verification(self, incident_id: str) -> Optional[Dict[str, Any]]:
+        conn = self._get_connection()
+        cur = conn.execute("SELECT * FROM verifications WHERE incident_id = ? ORDER BY timestamp DESC LIMIT 1", (incident_id,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["details"] = json.loads(d["details"]) if d.get("details") else {}
+        return d
 
     def add_audit_log(self, entry: Dict[str, Any]):
         conn = self._get_connection()
