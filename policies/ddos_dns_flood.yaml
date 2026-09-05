@@ -1,0 +1,23 @@
+policy_id: POL-NET-002-DNS
+name: DoS DNS Flood Mitigation Policy
+enabled: true
+description: Auto-mitigate or alert on DNS Amplification/Flood attacks.
+
+conditions:
+  attack_type: DoS DNS Flood
+  min_confidence: 0.85
+  min_risk: 50.0
+
+decision:
+  severity: HIGH
+  priority: P2
+  automation_level: 5
+  analyst_required: false
+
+playbook:
+  id: PB-NET-002-DNS-FLOOD
+
+actions:
+  - DNS_RATE_LIMIT
+  - TEMP_BLOCK_IP
+  - CREATE_INCIDENT

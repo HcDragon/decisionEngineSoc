@@ -1,0 +1,23 @@
+policy_id: POL-NET-005-UDP
+name: DoS UDP Flood Mitigation Policy
+enabled: true
+description: Mitigate UDP flood attacks using firewall rate-limiting and temporary IP blocks.
+
+conditions:
+  attack_type: DoS UDP Flood
+  min_confidence: 0.85
+  min_risk: 50.0
+
+decision:
+  severity: CRITICAL
+  priority: P1
+  automation_level: 5
+  analyst_required: false
+
+playbook:
+  id: PB-NET-005-UDP-FLOOD
+
+actions:
+  - UDP_RATE_LIMIT
+  - TEMP_BLOCK_IP
+  - CREATE_INCIDENT

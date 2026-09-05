@@ -1,0 +1,23 @@
+policy_id: POL-NET-003-ICMP
+name: DoS ICMP Flood Mitigation Policy
+enabled: true
+description: Auto-mitigate or filter ICMP ping flood attacks.
+
+conditions:
+  attack_type: DoS ICMP Flood
+  min_confidence: 0.85
+  min_risk: 50.0
+
+decision:
+  severity: HIGH
+  priority: P2
+  automation_level: 5
+  analyst_required: false
+
+playbook:
+  id: PB-NET-003-ICMP-FLOOD
+
+actions:
+  - ICMP_FILTER
+  - RATE_LIMIT
+  - CREATE_INCIDENT

@@ -6,8 +6,18 @@ class PolicyEngine:
     """
     Evaluates business logic thresholds against YAML policies to determine Action mapping.
     """
-    def __init__(self, policies_dir: str = "decision_engine/policies"):
+    def __init__(self, policies_dir: str = None):
         self.policies = []
+        if policies_dir is None:
+            # Locate project root dynamically
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            candidate = os.path.join(base_dir, "policies")
+            if os.path.exists(candidate):
+                policies_dir = candidate
+            elif os.path.exists("policies"):
+                policies_dir = "policies"
+            else:
+                policies_dir = "policies"
         self.load_policies(policies_dir)
 
     def load_policies(self, policies_dir: str):

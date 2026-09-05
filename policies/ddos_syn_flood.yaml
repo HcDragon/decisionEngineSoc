@@ -1,0 +1,23 @@
+policy_id: POL-NET-004-SYN
+name: DoS SYN Flood Mitigation Policy
+enabled: true
+description: Auto-mitigate or alert on DoS SYN Flood network attacks based on confidence and risk score.
+
+conditions:
+  attack_type: DoS SYN Flood
+  min_confidence: 0.85
+  min_risk: 50.0
+
+decision:
+  severity: CRITICAL
+  priority: P1
+  automation_level: 5
+  analyst_required: false
+
+playbook:
+  id: PB-NET-004-SYN-FLOOD
+
+actions:
+  - BLOCK_SOURCE_IP
+  - SYN_PROTECTION
+  - CREATE_INCIDENT

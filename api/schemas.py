@@ -35,3 +35,6 @@ class DecisionResponse(BaseModel):
     analyst_required: bool
     generated_time: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     src_ip: str
+
+    def __getitem__(self, item: str):
+        return getattr(self, item)

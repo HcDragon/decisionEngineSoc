@@ -4,8 +4,10 @@ from context.threat_intel import ThreatIntel
 from intelligence.risk_calculator import RiskCalculator
 from intelligence.policy_engine import PolicyEngine
 from playbooks.selector import PlaybookSelector
-from executor import SimulationExecutor
+from core.executor import SimulationExecutor
 from models.enums import IncidentStatus
+from datetime import datetime, timezone
+from typing import Union, Dict, Any
 import uuid
 
 class DecisionManager:
@@ -57,11 +59,10 @@ class DecisionManager:
         reasons.append(f"Policy '{policy_match.get('policy_id')}' matched" if is_exact else "No exact policy matched, used default fallback")
         
         # Determine incident status based on automation level
-        if auto_lvl >= 4:
+        if auto_lvl >= 5:
             status = IncidentStatus.AUTO_MITIGATED
             analyst_req = False
             rec_action = "Automatically Applied Playbook Mitigations."
-            # Simulate automatic execution
             self.executor.execute_actions(actions_list, prediction.src_ip)
         elif auto_lvl >= 2:
             status = IncidentStatus.PENDING_APPROVAL
@@ -90,3 +91,41 @@ class DecisionManager:
             analyst_required=analyst_req,
             src_ip=prediction.src_ip
         )
+
+    def process_prediction(self, prediction: Union[Dict[str, Any], TrafficPrediction]) -> DecisionResponse:
+        """
+        Convenience method to process either a raw dictionary or a TrafficPrediction model.
+        Supports standard dictionary keys like 'source_ip' / 'src_ip', 'destination_ip' / 'dest_ip'.
+        """
+        if isinstance(prediction, dict):
+            src_ip = prediction.get("source_ip") or prediction.get("src_ip", "192.168.1.100")
+            dest_ip = prediction.get("destination_ip") or prediction.get("dest_ip", "10.0.0.5")
+            attack_type = prediction.get("attack_type", "Benign Traffic")
+            if attack_type == "Benign":
+                attack_type = "Benign Traffic"
+            confidence = float(prediction.get("confidence", 95.0))
+            packet_count = int(prediction.get("packet_count", 100))
+            timestamp = prediction.get("timestamp", datetime.now(timezone.utc).isoformat())
+            src_port = int(prediction.get("src_port", 0))
+            dest_port = int(prediction.get("dest_port", 80))
+            protocol = prediction.get("protocol", "TCP")
+            flow_duration = float(prediction.get("flow_duration", 1.0))
+            asset_crit = prediction.get("asset_criticality")
+            hist_inc = prediction.get("historical_incidents", 0)
+
+            prediction_obj = TrafficPrediction(
+                timestamp=timestamp,
+                attack_type=attack_type,
+                confidence=confidence,
+                src_ip=src_ip,
+                dest_ip=dest_ip,
+                src_port=src_port,
+                dest_port=dest_port,
+                protocol=protocol,
+                packet_count=packet_count,
+                flow_duration=flow_duration,
+                asset_criticality=asset_crit,
+                historical_incidents=hist_inc
+            )
+            return self.process(prediction_obj)
+        return self.process(prediction)
