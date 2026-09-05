@@ -1,0 +1,157 @@
+# Decision Engine Policies
+# Policies are evaluated by the Policy Engine in order of priority (100 -> 1)
+# Higher priority policies win in conflict resolution.
+
+policies:
+  - policy_id: "DOS-SYN-001"
+    name: "High-Confidence SYN Flood Autonomous Containment"
+    description: "Instantly contain high-intensity DoS SYN flood attacks against monitored assets."
+    enabled: true
+    priority: 100
+    conditions:
+      attack_type:
+        - "DoS SYN Flood"
+        - "SYN_FLOOD"
+      confidence:
+        minimum: 0.85
+      risk:
+        minimum: 70.0
+    decision: "CONTAIN"
+    severity: "CRITICAL"
+    automation_level: 5
+    playbook_id: "PB-DOS-SYN"
+    cooldown_seconds: 300
+    notification_required: true
+
+  - policy_id: "DOS-UDP-001"
+    name: "UDP Flood Autonomous Rate-Limiting & Mitigation"
+    description: "Mitigate high-volume UDP flood attacks with temporary firewall blocks and rate limiting."
+    enabled: true
+    priority: 90
+    conditions:
+      attack_type:
+        - "DoS UDP Flood"
+        - "UDP_FLOOD"
+      confidence:
+        minimum: 0.85
+      risk:
+        minimum: 65.0
+    decision: "CONTAIN"
+    severity: "CRITICAL"
+    automation_level: 5
+    playbook_id: "PB-DOS-UDP"
+    cooldown_seconds: 300
+    notification_required: true
+
+  - policy_id: "DOS-DNS-001"
+    name: "DNS Flood Mitigation Policy"
+    description: "Contain DNS amplification and query floods."
+    enabled: true
+    priority: 85
+    conditions:
+      attack_type:
+        - "DoS DNS Flood"
+        - "DNS_FLOOD"
+      confidence:
+        minimum: 0.80
+      risk:
+        minimum: 60.0
+    decision: "CONTAIN"
+    severity: "HIGH"
+    automation_level: 5
+    playbook_id: "PB-DOS-DNS"
+    cooldown_seconds: 300
+    notification_required: true
+
+  - policy_id: "DOS-ICMP-001"
+    name: "ICMP Ping Flood Filter Policy"
+    description: "Filter excessive ICMP traffic directed at network hosts."
+    enabled: true
+    priority: 80
+    conditions:
+      attack_type:
+        - "DoS ICMP Flood"
+        - "ICMP_FLOOD"
+      confidence:
+        minimum: 0.80
+      risk:
+        minimum: 55.0
+    decision: "CONTAIN"
+    severity: "HIGH"
+    automation_level: 4
+    playbook_id: "PB-DOS-ICMP"
+    cooldown_seconds: 300
+    notification_required: true
+
+  - policy_id: "BRUTE-FORCE-001"
+    name: "Credential Brute Force Protection Policy"
+    description: "Mitigate authentication brute force attempts with IP quarantine and credential resets."
+    enabled: true
+    priority: 75
+    conditions:
+      attack_type:
+        - "Dictionary Brute Force"
+        - "BRUTE_FORCE"
+      confidence:
+        minimum: 0.75
+      risk:
+        minimum: 45.0
+    decision: "CONTAIN"
+    severity: "HIGH"
+    automation_level: 4
+    playbook_id: "PB-BRUTE-FORCE"
+    cooldown_seconds: 600
+    notification_required: true
+
+  - policy_id: "RECON-001"
+    name: "Reconnaissance & Port Scan Detection Policy"
+    description: "Track and monitor reconnaissance activity."
+    enabled: true
+    priority: 50
+    conditions:
+      attack_type:
+        - "Reconnaissance"
+        - "Port Scan"
+      confidence:
+        minimum: 0.60
+      risk:
+        minimum: 30.0
+    decision: "MONITOR"
+    severity: "MEDIUM"
+    automation_level: 2
+    playbook_id: "PB-RECON"
+    cooldown_seconds: 180
+    notification_required: true
+
+  - policy_id: "BENIGN-001"
+    name: "Benign Network Traffic Baseline Policy"
+    description: "Log and observe benign network traffic without remediation action."
+    enabled: true
+    priority: 25
+    conditions:
+      attack_type:
+        - "Benign Traffic"
+        - "Benign"
+      confidence:
+        minimum: 0.0
+      risk:
+        minimum: 0.0
+    decision: "ALLOW"
+    severity: "INFORMATIONAL"
+    automation_level: 0
+    playbook_id: "PB-BENIGN"
+    cooldown_seconds: 0
+    notification_required: false
+
+  - policy_id: "DEFAULT-FALLBACK"
+    name: "Default Fallback Policy"
+    description: "Safely log and notify security analysts when no specific policy matches."
+    enabled: true
+    priority: 10
+    conditions: {}
+    decision: "NOTIFY"
+    severity: "LOW"
+    automation_level: 1
+    playbook_id: "PB-DEFAULT"
+    cooldown_seconds: 60
+    notification_required: true

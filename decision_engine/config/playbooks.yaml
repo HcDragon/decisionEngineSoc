@@ -1,0 +1,190 @@
+# Decision Engine Playbooks
+# Reusable response workflows composed of discrete sequential steps
+
+playbooks:
+  - playbook_id: "PB-DOS-SYN"
+    name: "DoS SYN Flood Containment Playbook"
+    description: "Automated response workflow to suppress SYN flood attacks and protect load balancers."
+    steps:
+      - step_number: 1
+        action: "CREATE_INCIDENT"
+        description: "Initialize incident tracking in SOC database"
+        required: true
+
+      - step_number: 2
+        action: "NOTIFY_ANALYST"
+        description: "Dispatch automated high-priority alert to on-duty analyst"
+        required: true
+
+      - step_number: 3
+        action: "BLOCK_IP_SIMULATION"
+        description: "Simulate perimeter firewall block rule for attacking source IP"
+        required: true
+        parameters:
+          duration_seconds: 300
+
+      - step_number: 4
+        action: "MONITOR_TRAFFIC"
+        description: "Observe network interface for traffic rate changes"
+        required: true
+        parameters:
+          observation_window_seconds: 10
+
+      - step_number: 5
+        action: "VERIFY_MITIGATION"
+        description: "Verify that incoming packet rate drops below threshold"
+        required: true
+
+      - step_number: 6
+        action: "RESOLVE_OR_ESCALATE"
+        description: "Resolve incident if verified or escalate if attack persists"
+        required: true
+
+  - playbook_id: "PB-DOS-UDP"
+    name: "DoS UDP Flood Mitigation Playbook"
+    description: "Rate-limiting and firewall mitigation for UDP volumetric flooding."
+    steps:
+      - step_number: 1
+        action: "CREATE_INCIDENT"
+        description: "Register incident record"
+        required: true
+
+      - step_number: 2
+        action: "NOTIFY_ANALYST"
+        description: "Notify security operations"
+        required: true
+
+      - step_number: 3
+        action: "RATE_LIMIT_SIMULATION"
+        description: "Apply temporary rate limiting on destination port"
+        required: true
+        parameters:
+          rate_limit_pps: 500
+          duration_seconds: 300
+
+      - step_number: 4
+        action: "MONITOR_TRAFFIC"
+        description: "Monitor post-action traffic rate"
+        required: true
+
+      - step_number: 5
+        action: "VERIFY_MITIGATION"
+        description: "Verify bandwidth reduction"
+        required: true
+
+      - step_number: 6
+        action: "RESOLVE_OR_ESCALATE"
+        description: "State-aware conclusion"
+        required: true
+
+  - playbook_id: "PB-DOS-DNS"
+    name: "DNS Flood Mitigation Playbook"
+    description: "Rate limiting on port 53 and anomalous source quarantine."
+    steps:
+      - step_number: 1
+        action: "CREATE_INCIDENT"
+        required: true
+      - step_number: 2
+        action: "NOTIFY_ANALYST"
+        required: true
+      - step_number: 3
+        action: "RATE_LIMIT_SIMULATION"
+        required: true
+        parameters:
+          rate_limit_pps: 200
+          duration_seconds: 300
+      - step_number: 4
+        action: "VERIFY_MITIGATION"
+        required: true
+      - step_number: 5
+        action: "RESOLVE_OR_ESCALATE"
+        required: true
+
+  - playbook_id: "PB-DOS-ICMP"
+    name: "ICMP Flood Defense Playbook"
+    description: "Apply protocol filtering for echo-request flooding."
+    steps:
+      - step_number: 1
+        action: "CREATE_INCIDENT"
+        required: true
+      - step_number: 2
+        action: "NOTIFY_ANALYST"
+        required: true
+      - step_number: 3
+        action: "ICMP_FILTER_SIMULATION"
+        required: true
+        parameters:
+          duration_seconds: 300
+      - step_number: 4
+        action: "VERIFY_MITIGATION"
+        required: true
+      - step_number: 5
+        action: "RESOLVE_OR_ESCALATE"
+        required: true
+
+  - playbook_id: "PB-BRUTE-FORCE"
+    name: "Dictionary Brute Force Response Playbook"
+    description: "Quarantine hostile authentication sources and reset credentials."
+    steps:
+      - step_number: 1
+        action: "CREATE_INCIDENT"
+        required: true
+      - step_number: 2
+        action: "NOTIFY_ANALYST"
+        required: true
+      - step_number: 3
+        action: "BLOCK_IP_SIMULATION"
+        description: "Block attacking source IP"
+        required: true
+        parameters:
+          duration_seconds: 600
+      - step_number: 4
+        action: "RESET_CREDENTIALS_SIMULATION"
+        description: "Simulate IAM account lock / password reset for targeted service"
+        required: true
+      - step_number: 5
+        action: "VERIFY_MITIGATION"
+        required: true
+      - step_number: 6
+        action: "RESOLVE_OR_ESCALATE"
+        required: true
+
+  - playbook_id: "PB-RECON"
+    name: "Reconnaissance Monitoring Playbook"
+    description: "Passive tracking of port scanning and probe activity."
+    steps:
+      - step_number: 1
+        action: "CREATE_INCIDENT"
+        required: true
+      - step_number: 2
+        action: "MONITOR_SOURCE"
+        description: "Flag source IP for enhanced telemetry logging"
+        required: true
+        parameters:
+          duration_seconds: 900
+      - step_number: 3
+        action: "NOTIFY_ANALYST"
+        required: true
+
+  - playbook_id: "PB-BENIGN"
+    name: "Benign Baseline Logging Playbook"
+    description: "Silent logging for validated benign flows."
+    steps:
+      - step_number: 1
+        action: "LOG_EVENT"
+        description: "Log flow metadata for baseline statistics"
+        required: true
+
+  - playbook_id: "PB-DEFAULT"
+    name: "Default Triage Playbook"
+    description: "Fallback playbook for unmapped threat classifications."
+    steps:
+      - step_number: 1
+        action: "CREATE_INCIDENT"
+        required: true
+      - step_number: 2
+        action: "NOTIFY_ANALYST"
+        required: true
+      - step_number: 3
+        action: "MONITOR_SOURCE"
+        required: true

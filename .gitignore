@@ -42,3 +42,11 @@ Thumbs.db
 *.swp
 *.swo
 powershell.cmd
+
+# SQLite / Database runtime files
+*.db
+*.sqlite
+*.sqlite3
+*.db-wal
+*.db-shm
+decision_engine/data/

@@ -1,0 +1,81 @@
+# Risk Engine Configuration
+# Mathematical formulation:
+# Normalized Risk Score (0-100) = SUM(factor_value_normalized * factor_weight)
+
+risk:
+  scale:
+    min: 0
+    max: 100
+  
+  categories:
+    informational:
+      min: 0
+      max: 20
+    low:
+      min: 21
+      max: 40
+    medium:
+      min: 41
+      max: 60
+    high:
+      min: 61
+      max: 80
+    critical:
+      min: 81
+      max: 100
+
+  factors:
+    detection_confidence:
+      weight: 0.25
+      description: "Confidence output from the upstream ML detection model (0.0 - 1.0)"
+
+    attack_severity:
+      weight: 0.25
+      description: "Inherent severity of the detected attack type"
+      base_scores:
+        "Benign Traffic": 0
+        "Benign": 0
+        "Reconnaissance": 40
+        "Dictionary Brute Force": 70
+        "DoS ICMP Flood": 80
+        "DoS DNS Flood": 85
+        "DoS UDP Flood": 90
+        "DoS SYN Flood": 95
+        "default": 50
+
+    traffic_intensity:
+      weight: 0.20
+      description: "Intensity of network traffic (packets per second / bytes)"
+      thresholds:
+        extreme:
+          min_pps: 20000
+          score: 100
+        high:
+          min_pps: 5000
+          score: 75
+        moderate:
+          min_pps: 1000
+          score: 50
+        low:
+          min_pps: 100
+          score: 25
+        negligible:
+          score: 0
+
+    asset_criticality:
+      weight: 0.15
+      description: "Criticality score of the destination asset from CMDB / Inventory"
+      default_score: 50
+
+    recurrence:
+      weight: 0.15
+      description: "Recurrence and historical frequency of events from the source IP"
+      thresholds:
+        frequent:
+          min_events: 10
+          score: 100
+        repeated:
+          min_events: 3
+          score: 60
+        single:
+          score: 0

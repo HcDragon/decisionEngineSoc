@@ -8,16 +8,20 @@ Designed to bridge the gap between Machine Learning threat detection and autonom
 
 ## Key Features
 
-- **Automated Risk Scoring:** Mathematical risk calculation based on attack severity, ML confidence, asset criticality, threat intelligence reputation, and packet frequency.
-- **Declarative YAML Policies:** Easily configurable remediation rules located in `policies/` specifying automation levels, priorities, and action lists.
-- **Standardized Playbook Mapping:** Seamless mapping of threats (SYN Floods, UDP Floods, DNS Floods, ICMP Floods, Brute Force) to predefined SOC playbooks.
-- **Tiered Automation & Human-in-the-Loop:**
-  - **Level 5:** Fully autonomous mitigation (IP blocking, SYN cookies, rate limiting) for validated attacks.
-  - **Level 2–4:** Manual analyst approval workflow via API or SOC dashboard for sensitive actions.
-  - **Level 0–1:** Passive logging and monitoring for benign or low-confidence traffic.
-- **Dual-Stack Interface:**
-  - **FastAPI REST Service:** Microservice for high-throughput ingestion and integration.
-  - **Streamlit SOC Command Center:** Interactive analyst dashboard with live event streams, risk breakdowns, and one-click manual approvals.
+- **11-Stage Autonomous Orchestration Pipeline:**
+  1. Threat Event Validation (Strict Pydantic schema validation & legacy flat payload normalization)
+  2. Context Enrichment (Observed telemetry, Derived metrics, and Configured CMDB/TIP data)
+  3. Explainable Risk Scoring (Normalized 0–100 score with granular mathematical factor contributions)
+  4. Policy Evaluation & Priority Resolution (Declarative YAML policies with deterministic priority arbitration)
+  5. Decision Generation & Level Allocation (Automation levels 0 to 5, SOC analyst escalation flags)
+  6. Playbook Orchestration (Config-driven multi-step response workflows in `playbooks.yaml`)
+  7. Safe Action Execution (SIMULATION & PRODUCTION execution modes, strict action allowlists)
+  8. Outcome Verification (Automated traffic drop percentage vs. expected threshold comparison)
+  9. Recovery, Rollback & Escalation (Stateful action duration tracking, auto-rollback, and timeout escalation)
+  10. Stateful Incident Management (Sliding time-window deduplication, persistent state machine)
+  11. Forensic Audit Trail & Event Bus (Immutable SQLite WAL-mode audit logging and real-time SSE streaming)
+- **Zero Fake Runtime Telemetry:** Ready to ingest real threat event streams via `POST /api/v1/decision/analyze` from upstream ML / NFStream pipelines.
+- **Enterprise Streamlit SOAR Command Center:** Live incident registry, explainable decision inspector, active mitigation monitor, manual approval actions, and forensic audit stream.
 
 ---
 
@@ -26,57 +30,50 @@ Designed to bridge the gap between Machine Learning threat detection and autonom
 ```
 DecisionEngine/
 ├── main.py                         # Application launcher (FastAPI + Streamlit)
-├── dashboard.py                    # Streamlit SOC Command Center UI
-├── executor.py                     # Root compatibility export for executors
+├── dashboard.py                    # Streamlit Enterprise SOAR Command Center
 ├── requirements.txt                # Python dependencies
 ├── README.md                       # Project documentation
 │
-├── api/                            # REST API layer
-│   ├── __init__.py
-│   ├── router.py                   # FastAPI router (/analyze, /incidents, /approve)
-│   └── schemas.py                  # Pydantic data schemas
+├── decision_engine/                # Production SOAR Decision Engine Module
+│   ├── api/                        # FastAPI REST service & SSE live stream generator
+│   │   ├── routes.py               # /analyze, /incidents, /decisions, /events/stream, /approve
+│   │   └── streaming.py            # Real-time SSE generator for dashboard live feeds
+│   ├── models/                     # Strongly-typed Pydantic v2 domain models
+│   │   ├── threat_event.py         # ThreatEvent with automatic flat payload normalization
+│   │   ├── context.py              # EnrichedContext (Observed, Derived, Configured)
+│   │   ├── risk.py                 # RiskAssessment & RiskFactor contributions
+│   │   ├── policy.py               # PolicyDefinition & PolicyMatchResult
+│   │   ├── decision.py             # SecurityDecision (explainable reasons, automation levels)
+│   │   ├── playbook.py             # PlaybookDefinition & PlaybookExecutionRecord
+│   │   ├── action.py               # ActionExecutionRequest & ActionResult
+│   │   ├── verification.py         # VerificationResult & status metrics
+│   │   └── incident.py             # IncidentRecord with state transitions
+│   ├── config/                     # Declarative YAML configurations
+│   │   ├── risk.yaml               # Factor weights, base severities, confidence multipliers
+│   │   ├── policies.yaml           # Security policies with deterministic priority ordering
+│   │   └── playbooks.yaml          # Multi-step response workflows
+│   ├── context/                    # Context enrichment engine (CMDB asset + TIP lookup)
+│   ├── risk/                       # Explainable risk assessment engine (0-100 normalized)
+│   ├── policy/                     # Declarative policy matcher with priority resolution
+│   ├── playbooks/                  # Playbook workflow dispatcher and step executor
+│   ├── actions/                    # Safe action execution subsystem
+│   │   ├── action_executor.py      # SOAR executor with active mitigation tracking & allowlist
+│   │   └── adapters/               # Pluggable execution adapters (SimulationAdapter, etc.)
+│   ├── verification/               # Closed-loop mitigation verification engine
+│   ├── recovery/                   # Action lifecycle manager (rollback & escalation)
+│   ├── incidents/                  # Stateful incident correlation & sliding window deduplication
+│   ├── storage/                    # Persistent SQLite storage with WAL mode & thread-local connections
+│   ├── audit/                      # Forensic audit logging system
+│   ├── events/                     # Real-time Pub/Sub and SSE event bus
+│   └── decision/                   # DecisionManager master pipeline orchestrator
 │
-├── core/                           # Core orchestration logic
-│   ├── __init__.py
-│   ├── engine.py                   # DecisionManager pipeline orchestrator
-│   ├── config.py                   # Weights and base severities
-│   └── executor.py                 # SimulationExecutor and ActionExecutor
-│
-├── context/                        # Context enrichment
-│   ├── __init__.py
-│   ├── asset_db.py                 # Asset database / CMDB mock
-│   └── threat_intel.py             # Threat intelligence / TIP mock
-│
-├── intelligence/                   # Intelligence engines
-│   ├── __init__.py
-│   ├── risk_calculator.py          # Dynamic risk formula
-│   └── policy_engine.py            # YAML policy engine
-│
-├── models/                         # Domain models & enumerations
-│   ├── __init__.py
-│   └── enums.py                    # AttackType, Severity, PlaybookID, IncidentStatus
-│
-├── playbooks/                      # SOC Playbook selectors
-│   ├── __init__.py
-│   └── selector.py                 # AttackType to PlaybookID mapping
-│
-├── policies/                       # Declarative YAML policies
-│   ├── benign.yaml
-│   ├── brute_force.yaml
-│   ├── ddos_dns_flood.yaml
-│   ├── ddos_icmp_flood.yaml
-│   ├── ddos_syn_flood.yaml
-│   └── ddos_udp_flood.yaml
-│
-├── docs/                           # Detailed documentation
-│   ├── architecture.md             # Enterprise Software Architecture Document
-│   └── simulation_guide.md         # Simulation instructions & Python examples
-│
-└── tests/                          # Pytest automated test suite
-    ├── __init__.py
-    ├── test_api.py                 # FastAPI endpoint test suite
-    ├── test_engine.py              # DecisionManager unit & scenario tests
-    └── malicious_payloads.json     # Sample test payloads
+├── api/                            # Backward-compatible API router re-exports
+├── core/                           # Backward-compatible core engine re-exports
+├── docs/                           # Architectural specifications & simulation guide
+└── tests/                          # Automated Pytest suite (31 tests passing)
+    ├── test_decision_engine.py     # Comprehensive 22-test Decision Engine suite
+    ├── test_api.py                 # REST API integration tests
+    └── test_engine.py              # Decision Manager backward-compatibility tests
 ```
 
 ---
