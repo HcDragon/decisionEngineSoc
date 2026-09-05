@@ -410,6 +410,22 @@ elif page == "Live Traffic":
             })
             
         df_display_traffic = pd.DataFrame(traffic_rows)
+
+        # Quick Status Counts & Filter
+        col_lt1, col_lt2 = st.columns([3, 1])
+        with col_lt1:
+            total_shown = len(df_display_traffic)
+            norm_shown = len(df_display_traffic[df_display_traffic["Status"] == "NORMAL"])
+            susp_shown = len(df_display_traffic[df_display_traffic["Status"] == "SUSPICIOUS"])
+            st.markdown(f"Displaying **{total_shown}** flows: 🟢 **{norm_shown} Normal** | 🔴 **{susp_shown} Suspicious**")
+        with col_lt2:
+            status_filter = st.selectbox("Show Status:", ["ALL", "NORMAL ONLY", "SUSPICIOUS ONLY"], label_visibility="collapsed")
+
+        if status_filter == "NORMAL ONLY":
+            df_display_traffic = df_display_traffic[df_display_traffic["Status"] == "NORMAL"]
+        elif status_filter == "SUSPICIOUS ONLY":
+            df_display_traffic = df_display_traffic[df_display_traffic["Status"] == "SUSPICIOUS"]
+
         st.dataframe(
             df_display_traffic,
             use_container_width=True,
