@@ -40,25 +40,29 @@ html, body, [class*="css"], [data-testid="stAppViewContainer"] {
     color: #f1f5f9 !important;
 }
 
+/* Hide default Streamlit header */
+header[data-testid="stHeader"] {
+    background: transparent !important;
+    display: none !important;
+}
+
 /* Remove default Streamlit top margins */
 .block-container {
-    padding-top: 1rem !important;
+    padding-top: 1.2rem !important;
     padding-bottom: 1.5rem !important;
     padding-left: 1.8rem !important;
     padding-right: 1.8rem !important;
     max-width: 100% !important;
 }
 
-/* Top Navigation Bar */
-.top-nav-card {
-    background-color: #0c121e;
-    border: 1px solid #182235;
-    border-radius: 12px;
-    padding: 12px 18px;
-    margin-bottom: 16px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+/* Top Navigation Bar Card Wrapper */
+div[data-testid="stHorizontalBlock"]:has(div.brand-section) {
+    background-color: #0c121e !important;
+    border: 1px solid #182235 !important;
+    border-radius: 12px !important;
+    padding: 10px 16px !important;
+    margin-bottom: 14px !important;
+    align-items: center !important;
 }
 
 .brand-section {
