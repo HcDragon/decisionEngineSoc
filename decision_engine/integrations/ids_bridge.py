@@ -40,7 +40,33 @@ class IDSBridge:
     runs inference via the trained RandomForest model, and normalizes detections
     into strongly-typed ThreatEvent instances.
     """
-    def __init__(self, ids_project_dir: str = r"L:\AimlProject\ids_project"):
+    def __init__(self, ids_project_dir: Optional[str] = None):
+        if ids_project_dir is None:
+            # Check environment variable first
+            env_dir = os.environ.get("IDS_PROJECT_DIR")
+            if env_dir and os.path.exists(os.path.join(env_dir, "model.pkl")):
+                ids_project_dir = env_dir
+            else:
+                # Check cross-platform candidate locations across macOS / Apple Silicon and Windows
+                here = os.path.dirname(os.path.abspath(__file__))
+                candidates = [
+                    r"L:\AimlProject\ids_project",
+                    os.path.abspath(os.path.join(here, "..", "..", "ids_project")),
+                    os.path.abspath(os.path.join(here, "..", "..", "..", "AimlProject", "ids_project")),
+                    os.path.abspath(os.path.join(here, "..", "..", "..", "ids_project")),
+                    os.path.expanduser("~/AimlProject/ids_project"),
+                    os.path.expanduser("~/ids_project"),
+                    os.path.expanduser("~/Developer/AimlProject/ids_project"),
+                    os.path.expanduser("~/Documents/AimlProject/ids_project"),
+                    "/tmp/ids_project"
+                ]
+                for cand in candidates:
+                    if os.path.exists(os.path.join(cand, "model.pkl")):
+                        ids_project_dir = cand
+                        break
+                if not ids_project_dir:
+                    ids_project_dir = candidates[0]
+
         self.project_dir = os.path.abspath(ids_project_dir)
         self.model_path = os.path.join(self.project_dir, "model.pkl")
         self.encoder_path = os.path.join(self.project_dir, "label_encoder.pkl")

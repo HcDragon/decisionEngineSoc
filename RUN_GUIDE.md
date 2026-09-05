@@ -27,15 +27,53 @@ Comprehensive manual containing **all execution commands**, system workflows, an
 Ensure **Python 3.10+** is installed on your system.
 
 ### Install Required Dependencies:
-Open your terminal (PowerShell, Command Prompt, or Bash) in `L:\DecisionEngine`:
 
+#### On Windows:
 ```bash
 pip install -r requirements.txt
 ```
 
+#### On Apple MacBook Air M4 (macOS Apple Silicon):
+```bash
+# 1. Ensure Python 3 is installed (via Homebrew if needed: brew install python@3.11)
+python3 -m venv venv_mac
+source venv_mac/bin/activate
+
+# 2. Install ARM64 dependencies
+pip install -r requirements.txt
+
+# 3. Optional: Install real NFStream for live en0 hardware Wi-Fi sniffing
+brew install libpcap
+pip install nfstream
+```
+
 ---
 
-## 2. Commands to Run the Project
+## 2. Running on Apple MacBook Air M4
+
+We have included a dedicated, turnkey launcher for macOS:
+
+```bash
+chmod +x run_mac.sh
+./run_mac.sh
+```
+
+Or run manually:
+```bash
+python3 main.py
+```
+- **Streamlit SOC Command Center:** [http://localhost:8501](http://localhost:8501)
+- **FastAPI REST API:** [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+
+> **Upstream IDS Path Auto-Detection on Mac:**
+> The engine automatically discovers `ids_project` at `../AimlProject/ids_project`, `~/AimlProject/ids_project`, or from the environment variable:
+> ```bash
+> export IDS_PROJECT_DIR=/path/to/ids_project
+> ```
+
+---
+
+## 3. Commands to Run the Project (General / Windows)
 
 ### Option A: Full System Launcher (Recommended)
 Launches **both** the FastAPI REST backend on port 8000 and the Streamlit SOC Command Center dashboard on port 8501 simultaneously:
