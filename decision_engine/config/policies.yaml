@@ -103,15 +103,34 @@ policies:
     cooldown_seconds: 600
     notification_required: true
 
-  - policy_id: "RECON-001"
-    name: "Reconnaissance & Port Scan Detection Policy"
-    description: "Track and monitor reconnaissance activity."
+  - policy_id: "MITM-ARP-001"
+    name: "ARP Spoofing & Poisoning Autonomous Mitigation Policy"
+    description: "Detect and mitigate Man-in-the-Middle ARP poisoning attacks via port quarantine."
     enabled: true
-    priority: 50
+    priority: 70
     conditions:
       attack_type:
-        - "Reconnaissance"
-        - "Port Scan"
+        - "MITM ARP Spoofing"
+        - "ARP_SPOOFING"
+      confidence:
+        minimum: 0.70
+      risk:
+        minimum: 50.0
+    decision: "CONTAIN"
+    severity: "HIGH"
+    automation_level: 4
+    playbook_id: "PB-MITM-ARP"
+    cooldown_seconds: 300
+    notification_required: true
+
+  - policy_id: "RECON-OS-001"
+    name: "OS Fingerprinting & Advanced Reconnaissance Policy"
+    description: "Detect OS fingerprinting scans and initiate defensive monitoring."
+    enabled: true
+    priority: 55
+    conditions:
+      attack_type:
+        - "Recon OS Scan"
       confidence:
         minimum: 0.60
       risk:
@@ -119,8 +138,48 @@ policies:
     decision: "MONITOR"
     severity: "MEDIUM"
     automation_level: 2
-    playbook_id: "PB-RECON"
+    playbook_id: "PB-RECON-OS"
     cooldown_seconds: 180
+    notification_required: true
+
+  - policy_id: "RECON-PING-001"
+    name: "ICMP Sweep & Network Mapping Containment Policy"
+    description: "Detect ping sweeps and apply rate-limiting to map attempts."
+    enabled: true
+    priority: 50
+    conditions:
+      attack_type:
+        - "Recon Ping Sweep"
+      confidence:
+        minimum: 0.60
+      risk:
+        minimum: 25.0
+    decision: "CONTAIN"
+    severity: "MEDIUM"
+    automation_level: 3
+    playbook_id: "PB-RECON-PING"
+    cooldown_seconds: 180
+    notification_required: true
+
+  - policy_id: "RECON-HOST-001"
+    name: "Host Discovery Sweep Detection Policy"
+    description: "Track host discovery activity across subnets."
+    enabled: true
+    priority: 45
+    conditions:
+      attack_type:
+        - "Recon Host Discovery"
+        - "Reconnaissance"
+        - "Port Scan"
+      confidence:
+        minimum: 0.0
+      risk:
+        minimum: 15.0
+    decision: "MONITOR"
+    severity: "LOW"
+    automation_level: 2
+    playbook_id: "PB-RECON-HOST"
+    cooldown_seconds: 120
     notification_required: true
 
   - policy_id: "BENIGN-001"

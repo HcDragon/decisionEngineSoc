@@ -36,9 +36,13 @@ risk:
         "Benign Traffic": 0
         "Benign": 0
         "Reconnaissance": 40
+        "Recon Host Discovery": 40
+        "Recon Ping Sweep": 45
+        "Recon OS Scan": 50
         "Dictionary Brute Force": 70
         "DoS ICMP Flood": 80
         "DoS DNS Flood": 85
+        "MITM ARP Spoofing": 85
         "DoS UDP Flood": 90
         "DoS SYN Flood": 95
         "default": 50

@@ -166,6 +166,81 @@ playbooks:
         action: "NOTIFY_ANALYST"
         required: true
 
+  - playbook_id: "PB-MITM-ARP"
+    name: "ARP Poisoning Mitigation Playbook"
+    description: "Quarantine source port and initiate host isolation upon ARP poisoning detection."
+    steps:
+      - step_number: 1
+        action: "CREATE_INCIDENT"
+        required: true
+      - step_number: 2
+        action: "NOTIFY_ANALYST"
+        required: true
+      - step_number: 3
+        action: "ISOLATE_HOST_SIMULATION"
+        description: "Quarantine MAC/IP binding on internal switchport"
+        required: true
+        parameters:
+          duration_seconds: 300
+      - step_number: 4
+        action: "VERIFY_MITIGATION"
+        required: true
+      - step_number: 5
+        action: "RESOLVE_OR_ESCALATE"
+        required: true
+
+  - playbook_id: "PB-RECON-OS"
+    name: "OS Scan Defense Playbook"
+    description: "Defensive logging and TCP fingerprint obfuscation for OS scans."
+    steps:
+      - step_number: 1
+        action: "CREATE_INCIDENT"
+        required: true
+      - step_number: 2
+        action: "MONITOR_SOURCE"
+        required: true
+        parameters:
+          duration_seconds: 300
+      - step_number: 3
+        action: "NOTIFY_ANALYST"
+        required: false
+
+  - playbook_id: "PB-RECON-PING"
+    name: "ICMP Ping Sweep Mitigation Playbook"
+    description: "Rate-limit ICMP echo requests and monitor source probe."
+    steps:
+      - step_number: 1
+        action: "CREATE_INCIDENT"
+        required: true
+      - step_number: 2
+        action: "ICMP_FILTER_SIMULATION"
+        description: "Filter ICMP echo requests from source IP"
+        required: true
+        parameters:
+          duration_seconds: 300
+      - step_number: 3
+        action: "MONITOR_SOURCE"
+        required: true
+      - step_number: 4
+        action: "NOTIFY_ANALYST"
+        required: false
+
+  - playbook_id: "PB-RECON-HOST"
+    name: "Host Discovery Monitoring Playbook"
+    description: "Track subnet scanning activity."
+    steps:
+      - step_number: 1
+        action: "CREATE_INCIDENT"
+        required: true
+      - step_number: 2
+        action: "MONITOR_SOURCE"
+        required: true
+        parameters:
+          duration_seconds: 180
+      - step_number: 3
+        action: "NOTIFY_ANALYST"
+        required: false
+
   - playbook_id: "PB-BENIGN"
     name: "Benign Baseline Logging Playbook"
     description: "Silent logging for validated benign flows."
