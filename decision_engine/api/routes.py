@@ -25,10 +25,55 @@ decision_manager = DecisionManager(db=db, event_bus=event_bus)
 # In-memory incident cache for backward compatibility
 INCIDENTS_DB: Dict[str, Any] = {}
 
+# Continuous Live Traffic Sensor State
+SENSOR_STATE = {
+    "active": True,
+    "total_inferred": 0,
+    "last_flow_time": None
+}
+
+def _sensor_background_worker():
+    """Continuously consumes real network flows from IDSBridge and feeds them into Decision Engine."""
+    try:
+        import time as _time
+        from decision_engine.integrations.ids_bridge import IDSBridge
+        bridge = IDSBridge()
+        if not bridge.is_ready:
+            return
+        for threat_event, meta in bridge.stream_continuous(delay_seconds=1.2):
+            if not SENSOR_STATE.get("active", True):
+                _time.sleep(0.8)
+                continue
+            try:
+                decision_manager.process(threat_event)
+                SENSOR_STATE["total_inferred"] = SENSOR_STATE.get("total_inferred", 0) + 1
+                SENSOR_STATE["last_flow_time"] = datetime.now(timezone.utc).isoformat()
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+import os as _os
+import threading as _threading
+if _os.environ.get("PYTEST_CURRENT_TEST") is None and _os.environ.get("DISABLE_SENSOR") != "1":
+    _sensor_thread = _threading.Thread(target=_sensor_background_worker, daemon=True)
+    _sensor_thread.start()
+
 @app.get("/", include_in_schema=False)
 async def root():
     """Redirects root URL to interactive Swagger documentation."""
     return RedirectResponse(url="/docs")
+
+@app.get("/api/v1/sensor/status")
+async def get_sensor_status():
+    """Returns the live status of the continuous network traffic sensor."""
+    return SENSOR_STATE
+
+@app.post("/api/v1/sensor/toggle")
+async def toggle_sensor():
+    """Pauses or resumes the continuous network traffic sensor."""
+    SENSOR_STATE["active"] = not SENSOR_STATE.get("active", True)
+    return SENSOR_STATE
 
 @app.get("/api/v1/health")
 async def health_check():

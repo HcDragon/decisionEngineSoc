@@ -274,3 +274,33 @@ class IDSBridge:
             yield threat_event, meta
             if delay_seconds > 0:
                 time.sleep(delay_seconds)
+
+    def stream_continuous(
+        self,
+        delay_seconds: float = 1.2,
+        attack_type_filter: Optional[str] = None
+    ) -> Generator[Tuple[ThreatEvent, Dict[str, Any]], None, None]:
+        """
+        Continuously yields (ThreatEvent, flow_metadata) tuples sampled from the real IDS dataset in an infinite loop.
+        """
+        df = self.load_dataset_samples(n_per_class=25)
+        if attack_type_filter and "Attack Name" in df.columns:
+            filtered = df[df["Attack Name"] == attack_type_filter]
+            if not filtered.empty:
+                df = filtered
+
+        while True:
+            shuffled = df.sample(frac=1).reset_index(drop=True)
+            for idx, row in shuffled.iterrows():
+                pred, conf, actual = self.predict_flow(row)
+                threat_event = self.flow_to_threat_event(row, predicted_attack=pred, confidence=conf)
+                meta = {
+                    "row_index": idx,
+                    "predicted": pred,
+                    "confidence": conf,
+                    "actual": actual,
+                    "match": (pred == actual) if actual else None
+                }
+                yield threat_event, meta
+                if delay_seconds > 0:
+                    time.sleep(delay_seconds)
