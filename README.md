@@ -122,5 +122,6 @@ pytest tests/
 
 ## Documentation
 
+- [Master Run & File Guide](RUN_GUIDE.md): **All commands** to launch, test, and stream traffic, with an exhaustive file-by-file breakdown.
 - [Architecture Design Document](docs/architecture.md): Complete specification of system components, mathematical formulas, and sequence diagrams.
 - [Simulation Guide](docs/simulation_guide.md): Code examples and step-by-step instructions for simulating network attack traffic.
