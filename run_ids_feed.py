@@ -33,8 +33,18 @@ def main():
         logger.error("Failed to load IDS model or feature artifacts from L:\\AimlProject\\ids_project")
         sys.exit(1)
 
+    use_api = args.api
+    if not use_api:
+        try:
+            r = requests.get("http://127.0.0.1:8000/api/v1/health", timeout=1.0)
+            if r.status_code == 200:
+                use_api = True
+                logger.info("Auto-detected active FastAPI server on port 8000. Streaming via HTTP API.")
+        except Exception:
+            pass
+
     manager = None
-    if not args.api:
+    if not use_api:
         logger.info("Operating in direct in-process Decision Engine mode.")
         manager = DecisionManager()
     else:
@@ -56,7 +66,7 @@ def main():
         print(f"[{count:>3}/{args.samples}] [{match_symbol}] IDS Detection: {predicted:<24} (Conf: {conf*100:>5.1f}%) | Actual: {str(actual):<18}")
         print(f"      Source: {threat_event.source.ip}:{threat_event.source.port} -> Target: {threat_event.destination.ip}:{threat_event.destination.port}")
 
-        if args.api:
+        if use_api:
             try:
                 payload = threat_event.model_dump() if hasattr(threat_event, "model_dump") else threat_event.dict()
                 resp = requests.post(args.endpoint, json=payload, timeout=5)

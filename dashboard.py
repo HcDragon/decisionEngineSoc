@@ -212,14 +212,13 @@ with st.sidebar:
         st.error("🔴 Decision Engine: Disconnected")
         st.caption("Launch backend with: `python main.py --api-only`")
 
-    auto_refresh = st.toggle("Live Auto-Refresh", value=True)
+    auto_refresh = st.toggle("Live Auto-Refresh", value=False)
+    refresh_sec = 5
     if auto_refresh:
         refresh_sec = st.select_slider("Refresh Interval", options=[2, 3, 5, 10], value=5)
         st.caption(f"Polling every {refresh_sec} seconds")
-        time.sleep(refresh_sec)
-        st.rerun()
 
-    if st.button("🔄 Manual Poll Now", use_container_width=True):
+    if st.button("🔄 Refresh Data Now", use_container_width=True):
         st.rerun()
 
     st.markdown("---")
@@ -567,3 +566,10 @@ with tab_audit:
                 </div>
             """, unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
+
+# ---------------------------------------------------------
+# Auto-Refresh Handler (Executes after full UI has rendered)
+# ---------------------------------------------------------
+if auto_refresh:
+    time.sleep(refresh_sec)
+    st.rerun()
