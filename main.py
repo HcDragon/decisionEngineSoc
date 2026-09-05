@@ -19,7 +19,7 @@ def main():
             # Start the FastAPI backend
             print("Launching FastAPI Backend on http://127.0.0.1:8000")
             api_process = subprocess.Popen(
-                [sys.executable, "-m", "uvicorn", "api.router:app", "--host", "127.0.0.1", "--port", "8000"],
+                [sys.executable, "-m", "uvicorn", "api.router:app", "--host", "127.0.0.1", "--port", "8000", "--reload"],
                 stdout=sys.stdout,
                 stderr=sys.stderr
             )
