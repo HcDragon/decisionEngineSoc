@@ -64,15 +64,23 @@ The scope of this engine includes ingesting ML predictions, prioritizing inciden
 - `recommended_action`, `playbook` (`PlaybookID`), `automation_level`, `incident_status`
 - `analyst_required`, `generated_time`, `src_ip`
 
-### 2.6 Supported Attack Types
-| Enum Value | String Label | Playbook |
-|---|---|---|
-| `BENIGN` | `Benign Traffic` | `PB-NET-000-BENIGN` |
-| `BRUTE_FORCE` | `Dictionary Brute Force` | `PB-ID-001-BRUTEFORCE` |
-| `DNS_FLOOD` | `DoS DNS Flood` | `PB-NET-002-DNS-FLOOD` |
-| `ICMP_FLOOD` | `DoS ICMP Flood` | `PB-NET-003-ICMP-FLOOD` |
-| `SYN_FLOOD` | `DoS SYN Flood` | `PB-NET-004-SYN-FLOOD` |
-| `UDP_FLOOD` | `DoS UDP Flood` | `PB-NET-005-UDP-FLOOD` |
+### 2.6 Supported Attack Categories (10 Classes)
+The Decision Engine and upstream Random Forest IDS natively support 10 attack classes:
+
+| Index | Attack Category | Default Policy | Playbook | Automation Level |
+|---|---|---|---|---|
+| 1 | `Benign Traffic` | `BENIGN-001` | `PB-BENIGN` | Level 0 (Log Only) |
+| 2 | `Dictionary Brute Force` | `BRUTE-FORCE-001` | `PB-BRUTE-FORCE` | Level 4 (Auto Contain) |
+| 3 | `DoS DNS Flood` | `DOS-DNS-001` | `PB-DOS-DNS` | Level 5 (Autonomous Containment) |
+| 4 | `DoS ICMP Flood` | `DOS-ICMP-001` | `PB-DOS-ICMP` | Level 4 (Auto Contain) |
+| 5 | `DoS SYN Flood` | `DOS-SYN-001` | `PB-DOS-SYN` | Level 5 (Autonomous Containment) |
+| 6 | `DoS UDP Flood` | `DOS-UDP-001` | `PB-DOS-UDP` | Level 5 (Autonomous Containment) |
+| 7 | `MITM ARP Spoofing` | `MITM-ARP-001` | `PB-MITM-ARP` | Level 4 (Auto Contain) |
+| 8 | `Recon Host Discovery` | `RECON-HOST-001` | `PB-RECON-PING` | Level 2 (Approval Required) |
+| 9 | `Recon OS Scan` | `RECON-OS-001` | `PB-RECON-OS` | Level 2 (Approval Required) |
+| 10 | `Recon Ping Sweep` | `RECON-PING-001` | `PB-RECON-PING` | Level 3 (Approval / Contain) |
+
+*(Note: The system supports exactly these 10 production attack categories; older prototype references to 12 categories including Port Scan and Vulnerability Scan were retired to match the trained model capabilities).*
 
 ---
 

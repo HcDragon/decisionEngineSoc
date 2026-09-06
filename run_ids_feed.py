@@ -1,8 +1,9 @@
 """
 IDS Live Feed Runner
-Streams real network traffic flows from L:\\AimlProject\\ids_project through the
-Random Forest ML model and pushes classified Threat Events into the Decision Engine.
+Streams real network traffic flows from the integrated AI/ML Random Forest model
+and pushes classified Threat Events into the Decision Engine.
 """
+import os
 import sys
 import time
 import argparse
@@ -10,6 +11,7 @@ import logging
 import requests
 
 from decision_engine.integrations.ids_bridge import IDSBridge
+from decision_engine.integrations.flagged_logger import NFStreamFlaggedLogger
 from decision_engine.decision.decision_manager import DecisionManager
 
 logging.basicConfig(
@@ -27,11 +29,12 @@ def main():
     parser.add_argument("--endpoint", type=str, default="http://127.0.0.1:8000/api/v1/decision/analyze", help="API URL")
     args = parser.parse_args()
 
-    logger.info("Initializing IDS Bridge connecting to L:\\AimlProject\\ids_project...")
+    logger.info("Initializing IDS Bridge connecting to integrated AIML model...")
     bridge = IDSBridge()
     if not bridge.is_ready:
-        logger.error("Failed to load IDS model or feature artifacts from L:\\AimlProject\\ids_project")
+        logger.error("Failed to load IDS model or feature artifacts from integrated aiml/ directory")
         sys.exit(1)
+    flagged_logger = NFStreamFlaggedLogger()
 
     use_api = args.api
     if not use_api:

@@ -5,7 +5,11 @@ streamlit>=1.35.0
 requests>=2.31.0
 pandas>=2.2.0
 plotly>=5.22.0
-xgboost>=2.0.3          # native ARM64 wheels available via pip; no CUDA required
 scikit-learn>=1.4.2
 joblib>=1.4.0
 pyyaml>=6.0.1
+matplotlib>=3.8.0
+seaborn>=0.13.0
+imbalanced-learn>=0.12.0
+nfstream>=6.5.3           # Live packet capture sensor (requires libpcap on macOS/Linux)
+

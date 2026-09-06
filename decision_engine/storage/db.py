@@ -14,6 +14,10 @@ class Database:
     _lock = threading.Lock()
 
     def __new__(cls, db_path: Optional[str] = None):
+        if db_path is not None:
+            obj = super(Database, cls).__new__(cls)
+            obj._initialized = False
+            return obj
         with cls._lock:
             if cls._instance is None:
                 cls._instance = super(Database, cls).__new__(cls)
@@ -269,6 +273,12 @@ class Database:
             d["is_mitigated"] = bool(d["is_mitigated"])
             results.append(d)
         return results
+
+    def count_incidents_by_source_ip(self, source_ip: str) -> int:
+        conn = self._get_connection()
+        cur = conn.execute("SELECT COUNT(*) as cnt FROM incidents WHERE source_ip = ?", (source_ip,))
+        row = cur.fetchone()
+        return int(row["cnt"]) if row else 0
 
     def save_threat_event(self, event_data: Dict[str, Any]):
         conn = self._get_connection()

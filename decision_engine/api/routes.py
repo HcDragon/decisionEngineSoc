@@ -10,37 +10,73 @@ from decision_engine.decision.decision_manager import DecisionManager
 from decision_engine.storage.db import Database
 from decision_engine.events.event_bus import EventBus
 from decision_engine.api.streaming import sse_event_generator
+from decision_engine.ml.detector import ThreatDetector
+import pandas as pd
+
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    task = None
+    if _os.environ.get("PYTEST_CURRENT_TEST") is None and _os.environ.get("DISABLE_MITIGATION_SWEEP") != "1":
+        task = asyncio.create_task(_mitigation_recovery_worker())
+    yield
+    if task:
+        task.cancel()
 
 app = FastAPI(
     title="Smart SOC Autonomous Decision Engine",
     description="Enterprise-grade SOAR Decision Engine for cyber threat orchestration and remediation.",
-    version="3.0.0"
+    version="3.0.0",
+    lifespan=lifespan
 )
 
 # Global Singletons
 db = Database()
 event_bus = EventBus()
 decision_manager = DecisionManager(db=db, event_bus=event_bus)
+detector = ThreatDetector()
 
 # In-memory incident cache for backward compatibility
 INCIDENTS_DB: Dict[str, Any] = {}
 
+def _detect_sensor_mode() -> str:
+    try:
+        import nfstream  # noqa: F401
+        return "LIVE_NFSTREAM"
+    except ImportError:
+        return "SIMULATED_DATASET_REPLAY"
+    except Exception as e:
+        logger.warning(f"Error detecting NFStream mode: {e}")
+        return "SIMULATED_DATASET_REPLAY"
+
 # Continuous Live Traffic Sensor State
 SENSOR_STATE = {
     "active": True,
+    "mode": _detect_sensor_mode(),
     "total_inferred": 0,
     "last_flow_time": None
 }
 
 def _sensor_background_worker():
-    """Continuously consumes real network flows from IDSBridge and feeds them into Decision Engine."""
+    """Continuously consumes network flows and feeds them into Decision Engine."""
     try:
         import time as _time
+        from decision_engine.integrations.nfstream_sensor import NFStreamSensor
         from decision_engine.integrations.ids_bridge import IDSBridge
+
         bridge = IDSBridge()
         if not bridge.is_ready:
+            logger.warning("IDSBridge is not ready. Sensor worker cannot start.")
             return
-        for threat_event, meta in bridge.stream_continuous(delay_seconds=1.2):
+
+        interface = _os.environ.get("NFSTREAM_INTERFACE", "en0")
+        sensor = NFStreamSensor(ids_bridge=bridge, interface=interface)
+        SENSOR_STATE["mode"] = "LIVE_NFSTREAM" if sensor.is_available else "SIMULATED_DATASET_REPLAY"
+        logger.info("Sensor background worker active (Mode: %s)", SENSOR_STATE["mode"])
+
+        stream_gen = sensor.stream_live() if sensor.is_available else bridge.stream_continuous(delay_seconds=1.2)
+        for threat_event, meta in stream_gen:
             if not SENSOR_STATE.get("active", True):
                 _time.sleep(0.8)
                 continue
@@ -48,16 +84,36 @@ def _sensor_background_worker():
                 decision_manager.process(threat_event)
                 SENSOR_STATE["total_inferred"] = SENSOR_STATE.get("total_inferred", 0) + 1
                 SENSOR_STATE["last_flow_time"] = datetime.now(timezone.utc).isoformat()
-            except Exception:
-                pass
-    except Exception:
-        pass
+            except Exception as exc:
+                logger.warning("Failed to process threat event in sensor worker: %s", exc)
+    except Exception as exc:
+        logger.warning("Sensor background worker encountered unhandled error: %s", exc)
 
 import os as _os
 import threading as _threading
+import asyncio
+import logging
+
+logger = logging.getLogger("DecisionEngine.API")
+
+MITIGATION_SWEEP_INTERVAL_SECONDS = float(_os.environ.get("MITIGATION_SWEEP_INTERVAL_SECONDS", 30))
+
+async def _mitigation_recovery_worker():
+    """Periodically sweeps and recovers expired temporary mitigations."""
+    while True:
+        try:
+            expired = decision_manager.recovery_manager.process_expired_mitigations()
+            if expired:
+                logger.info(f"Mitigation sweep completed: {len(expired)} mitigations expired/recovered.")
+        except Exception as e:
+            logger.warning(f"Error in mitigation recovery sweep: {e}")
+        await asyncio.sleep(MITIGATION_SWEEP_INTERVAL_SECONDS)
+
 if _os.environ.get("PYTEST_CURRENT_TEST") is None and _os.environ.get("DISABLE_SENSOR") != "1":
     _sensor_thread = _threading.Thread(target=_sensor_background_worker, daemon=True)
     _sensor_thread.start()
+
+
 
 @app.get("/", include_in_schema=False)
 async def root():
@@ -139,6 +195,13 @@ async def get_recent_traffic(limit: int = Query(100, ge=1, le=500)):
     """Retrieves recent network traffic flow records from the ingestion sensor."""
     return db.list_threat_events(limit=limit)
 
+@app.get("/api/v1/traffic/flagged")
+async def get_flagged_traffic(limit: int = Query(50, ge=1, le=200)):
+    """Retrieves recent flagged / suspicious flows recorded by the NFStream layer."""
+    from decision_engine.integrations.flagged_logger import NFStreamFlaggedLogger
+    flagged_logger = NFStreamFlaggedLogger()
+    return flagged_logger.get_recent_flagged_logs(limit=limit)
+
 @app.get("/api/v1/decisions/{incident_id}")
 async def get_decision_by_incident(incident_id: str):
     """Retrieves the explainable security decision for a specific incident."""
@@ -189,6 +252,62 @@ async def approve_incident(payload: Dict[str, Any] = Body(...)):
             INCIDENTS_DB[incident_id]["incident_status"] = "MANUAL_MITIGATED"
 
     return result
+        
+@app.get("/api/v1/model/info")
+async def get_model_info():
+    """Retrieves AI/ML model architecture, accuracy, features, and target attack classes."""
+    try:
+        return detector.get_model_info()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/model/predict")
+async def predict_flow_sample(
+    payload: Dict[str, Any] = Body(...),
+    feed_pipeline: bool = Query(False, description="If True, feeds prediction into SOAR decision pipeline")
+):
+    """
+    Executes real-time inference on a network flow vector (73 statistical features)
+    using the integrated Random Forest model.
+    """
+    try:
+        predicted_attack, confidence, class_probabilities = detector.predict_flow(payload)
+        response_data: Dict[str, Any] = {
+            "predicted_attack": predicted_attack,
+            "confidence": round(confidence, 4),
+            "class_probabilities": class_probabilities,
+            "is_malicious": predicted_attack != "Benign Traffic"
+        }
+        if feed_pipeline:
+            from decision_engine.integrations.ids_bridge import IDSBridge
+            bridge = IDSBridge()
+            threat_event = bridge.flow_to_threat_event(payload, predicted_attack=predicted_attack, confidence=confidence)
+            decision = decision_manager.process(threat_event)
+            response_data["decision"] = decision
+        return response_data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/model/sample")
+async def get_model_sample(attack_class: Optional[str] = Query(None)):
+    """Fetches a sample flow record from the dataset to test or demonstrate live inference."""
+    try:
+        samples_df = detector.load_dataset_samples(n_per_class=2)
+        if samples_df.empty:
+            raise HTTPException(status_code=404, detail="Dataset samples unavailable")
+        if attack_class and "Attack Name" in samples_df.columns:
+            matched = samples_df[samples_df["Attack Name"].str.lower() == attack_class.lower()]
+            if not matched.empty:
+                samples_df = matched
+        sample_row = samples_df.sample(1).iloc[0].to_dict()
+        clean_row = {
+            k: (None if pd.isna(v) else v) for k, v in sample_row.items()
+        }
+        return clean_row
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

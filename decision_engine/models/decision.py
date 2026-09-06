@@ -34,6 +34,8 @@ class SecurityDecision(BaseModel):
     severity: str
     policy_id: str
     playbook_id: str
+    playbook: Optional[str] = None
+    priority: Optional[int] = None
     automation_level: int
     analyst_required: bool
     recommended_action: str

@@ -132,7 +132,7 @@ policies:
       attack_type:
         - "Recon OS Scan"
       confidence:
-        minimum: 0.60
+        minimum: 0.65
       risk:
         minimum: 30.0
     decision: "MONITOR"
@@ -151,7 +151,7 @@ policies:
       attack_type:
         - "Recon Ping Sweep"
       confidence:
-        minimum: 0.60
+        minimum: 0.65
       risk:
         minimum: 25.0
     decision: "CONTAIN"

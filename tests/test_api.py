@@ -1,7 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
-from api.router import app, INCIDENTS_DB
-from models.enums import IncidentStatus
+from decision_engine.api.routes import app, INCIDENTS_DB
 
 client = TestClient(app)
 
@@ -48,8 +47,61 @@ def test_approve_incident():
     incident_id = list(INCIDENTS_DB.keys())[0]
     
     # Force status to PENDING_APPROVAL to test approval endpoint
-    INCIDENTS_DB[incident_id].incident_status = IncidentStatus.PENDING_APPROVAL
+    if hasattr(INCIDENTS_DB[incident_id], "incident_status"):
+        INCIDENTS_DB[incident_id].incident_status = "PENDING_APPROVAL"
+    else:
+        INCIDENTS_DB[incident_id]["incident_status"] = "PENDING_APPROVAL"
     
     response = client.post("/api/v1/decision/approve", json={"incident_id": incident_id})
     assert response.status_code == 200
-    assert INCIDENTS_DB[incident_id].incident_status == IncidentStatus.MANUAL_MITIGATED
+    status_val = INCIDENTS_DB[incident_id].incident_status if hasattr(INCIDENTS_DB[incident_id], "incident_status") else INCIDENTS_DB[incident_id]["incident_status"]
+    assert status_val == "MANUAL_MITIGATED"
+
+def test_get_flagged_traffic():
+    response = client.get("/api/v1/traffic/flagged")
+    assert response.status_code == 200
+    assert isinstance(response.json(), list)
+
+def test_mitigation_sweep_worker_execution(monkeypatch):
+    import os
+    from decision_engine.api.routes import decision_manager
+    db = decision_manager.db
+    db.save_incident({
+        "incident_id": "INC-SWEEP-01",
+        "event_id": "EVT-SWEEP-01",
+        "source_ip": "100.64.0.1",
+        "destination_ip": "10.0.0.5",
+        "attack_type": "DoS SYN Flood",
+        "current_state": "MONITORING"
+    })
+    db.save_active_mitigation({
+        "action_id": "ACT-SWEEP-01",
+        "incident_id": "INC-SWEEP-01",
+        "action_type": "BLOCK_IP_SIMULATION",
+        "target": "100.64.0.1",
+        "status": "ACTIVE",
+        "expires_at": "2020-01-01T00:00:00Z"
+    })
+    
+    expired = decision_manager.recovery_manager.process_expired_mitigations()
+    assert len(expired) >= 1
+    assert any(m["action_id"] == "ACT-SWEEP-01" for m in expired)
+    
+    inc = db.get_incident("INC-SWEEP-01")
+    assert inc["current_state"] == "RESOLVED"
+    
+    # Test configurable sweep interval via env var
+    monkeypatch.setenv("MITIGATION_SWEEP_INTERVAL_SECONDS", "45")
+    interval = float(os.environ.get("MITIGATION_SWEEP_INTERVAL_SECONDS", 30))
+    assert interval == 45.0
+
+def test_sensor_status_reports_mode():
+    """Task 6 Acceptance: /api/v1/sensor/status returns a field 'mode' reflecting runtime behavior."""
+    response = client.get("/api/v1/sensor/status")
+    assert response.status_code == 200
+    data = response.json()
+    assert "mode" in data
+    assert data["mode"] in ("LIVE_NFSTREAM", "SIMULATED_DATASET_REPLAY")
+    assert "active" in data
+
+

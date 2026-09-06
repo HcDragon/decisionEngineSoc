@@ -42,8 +42,12 @@ class DecisionManager:
         self.risk_engine = RiskEngine(audit_logger=self.audit)
         self.policy_engine = PolicyEngine(audit_logger=self.audit)
         self.action_executor = SOARActionExecutor(db=self.db, audit_logger=self.audit, event_bus=self.event_bus)
-        self.playbook_engine = PlaybookEngine(action_executor=self.action_executor, audit_logger=self.audit)
         self.verification_engine = VerificationEngine(self.db, self.audit)
+        self.playbook_engine = PlaybookEngine(
+            action_executor=self.action_executor,
+            audit_logger=self.audit,
+            verification_engine=self.verification_engine
+        )
         self.recovery_manager = RecoveryManager(self.db, self.audit)
         self.incident_manager = IncidentManager(db=self.db, audit_logger=self.audit, event_bus=self.event_bus)
 
@@ -135,6 +139,8 @@ class DecisionManager:
             severity=risk.severity.value,
             policy_id=selected_policy.policy_id,
             playbook_id=selected_policy.playbook_id,
+            playbook=selected_policy.playbook_id,
+            priority=selected_policy.priority,
             automation_level=auto_lvl,
             analyst_required=analyst_req,
             recommended_action=rec_action,
@@ -147,12 +153,14 @@ class DecisionManager:
         )
 
         # Stage 7: Playbook Execution
+        baseline_pps = context.observed.packets_per_second
         pb_record: PlaybookExecutionRecord = self.playbook_engine.execute_playbook(
             playbook_id=selected_policy.playbook_id,
             target=event.source.ip,
             automation_level=auto_lvl,
             incident_id=incident.incident_id,
-            approved=False
+            approved=False,
+            baseline_pps=baseline_pps
         )
 
         actions_taken = [step["action"] for step in pb_record.step_results if step["status"] == "SUCCESS"]
@@ -166,18 +174,33 @@ class DecisionManager:
                 IncidentState.PENDING_APPROVAL,
                 "Mitigation action pending manual analyst approval"
             )
-        elif auto_lvl >= 4 and actions_taken:
-            decision.incident_status = "AUTO_MITIGATED"
+        elif decision_type == DecisionType.ALLOW or selected_policy.policy_id == "BENIGN-001":
+            # Task 2: Benign traffic transitions directly to RESOLVED
+            decision.incident_status = "LOGGED"
             self.incident_manager.transition_state(
                 incident.incident_id,
-                IncidentState.RESPONSE_STARTED,
-                f"Automated playbook mitigation executed ({', '.join(actions_taken)})"
+                IncidentState.RESOLVED,
+                "Benign traffic verified and safely recorded"
             )
+        elif auto_lvl >= 4 and actions_taken:
+            # Task 1: Check verification step inside containment playbook
+            verify_step = next((s for s in pb_record.step_results if s["action"] == "VERIFY_MITIGATION"), None)
+            if verify_step and verify_step["status"] != "SUCCESS":
+                decision.incident_status = "ESCALATED"
+                self.recovery_manager.escalate_incident(
+                    incident_id=incident.incident_id,
+                    reason=f"Verification failed: {verify_step.get('message', 'Traffic reduction target not reached')}"
+                )
+            else:
+                decision.incident_status = "AUTO_MITIGATED"
+                self.incident_manager.transition_state(
+                    incident.incident_id,
+                    IncidentState.MONITORING,
+                    f"Automated playbook mitigation executed ({', '.join(actions_taken)}). Active surveillance engaged."
+                )
         elif auto_lvl == 0:
             decision.incident_status = "LOGGED"
-
-            # Stage 9: Security Outcome Verification
-            baseline_pps = context.observed.packets_per_second
+            # Non-benign LOG_ONLY policy
             ver_result: VerificationResult = self.verification_engine.verify_mitigation(
                 incident_id=incident.incident_id,
                 target=event.source.ip,
@@ -195,12 +218,8 @@ class DecisionManager:
                     incident_id=incident.incident_id,
                     reason=ver_result.reason
                 )
-        elif auto_lvl == 0:
-            self.incident_manager.transition_state(
-                incident.incident_id,
-                IncidentState.RESOLVED,
-                "Benign traffic verified and safely recorded"
-            )
+        else:
+            decision.incident_status = "LOGGED"
 
         # Update persistent incident and decision records
         current_inc = self.db.get_incident(incident.incident_id)

@@ -9,12 +9,20 @@ class SimulationExecutor:
     def __init__(self):
         self.adapter = SimulationAdapter()
 
+    LEGACY_ACTION_MAP = {
+        "BLOCK_SOURCE_IP": "BLOCK_IP_SIMULATION",
+        "SYN_PROTECTION": "RATE_LIMIT_SIMULATION",
+        "RATE_LIMIT_IP": "RATE_LIMIT_SIMULATION",
+        "ISOLATE_PORT": "ISOLATE_HOST_SIMULATION"
+    }
+
     def execute_actions(self, actions: List[str], ip: str) -> List[Dict[str, str]]:
         results = []
         for act in actions:
-            res: ActionResult = self.adapter.execute_action(action=act, target=ip)
+            target_act = self.LEGACY_ACTION_MAP.get(act, act)
+            res: ActionResult = self.adapter.execute_action(action=target_act, target=ip)
             results.append({
-                "action": res.action,
+                "action": act,
                 "mode": res.mode.value,
                 "status": res.status.value,
                 "message": res.message

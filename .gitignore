@@ -8,6 +8,7 @@ __pycache__/
 .venv
 env/
 venv/
+venv*/
 ENV/
 env.bak/
 venv.bak/
@@ -16,6 +17,7 @@ venv.bak/
 *.pkl
 *.model
 *.h5
+*.csv
 dataSets/*.csv
 dataSets/*.zip
 dataSets/*.gz

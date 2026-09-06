@@ -115,6 +115,38 @@ def test_context_enrichment(mock_threat_event_nested):
     # Verify Derived Data
     assert isinstance(context.derived.repeated_detections_count, int)
 
+def test_source_ip_historical_incidents_count(mock_threat_event_nested, tmp_path):
+    """Task 10 Acceptance: count_incidents_by_source_ip feeds real previous_incidents_count."""
+    test_db = Database(db_path=str(tmp_path / "test_hist.db"))
+    for i in range(3):
+        test_db.save_incident({
+            "incident_id": f"INC-HIST-{i}",
+            "event_id": f"EVT-HIST-{i}",
+            "source_ip": "192.168.1.100",
+            "destination_ip": f"10.0.0.{i+1}",
+            "attack_type": "DoS SYN Flood",
+            "current_state": "RESOLVED"
+        })
+    test_db.save_incident({
+        "incident_id": "INC-OTHER-01",
+        "event_id": "EVT-OTHER-01",
+        "source_ip": "172.16.0.1",
+        "destination_ip": "10.0.0.5",
+        "attack_type": "DoS SYN Flood",
+        "current_state": "RESOLVED"
+    })
+    
+    assert test_db.count_incidents_by_source_ip("192.168.1.100") == 3
+    assert test_db.count_incidents_by_source_ip("172.16.0.1") == 1
+    assert test_db.count_incidents_by_source_ip("10.99.99.99") == 0
+
+    enricher = ContextEnricher(db=test_db)
+    event = ThreatEvent(**mock_threat_event_nested)
+    ctx = enricher.enrich(event)
+    assert ctx.derived.previous_incidents_count == 3
+    assert ctx.derived.is_recurring_source is True
+
+
 # ---------------------------------------------------------
 # 3. Risk Calculation & Normalization Tests
 # ---------------------------------------------------------
@@ -272,6 +304,15 @@ def test_verification_failure():
 def test_recovery_expiry():
     db = Database()
     rec = RecoveryManager(db=db)
+    # Save incident in MONITORING state
+    db.save_incident({
+        "incident_id": "INC-EXP-01",
+        "event_id": "EVT-EXP-01",
+        "source_ip": "1.2.3.4",
+        "destination_ip": "10.0.0.5",
+        "attack_type": "DoS SYN Flood",
+        "current_state": "MONITORING"
+    })
     # Inject expired mitigation
     db.save_active_mitigation({
         "action_id": "ACT-EXP-01",
@@ -284,6 +325,10 @@ def test_recovery_expiry():
     expired = rec.process_expired_mitigations()
     assert len(expired) >= 1
     assert any(m["action_id"] == "ACT-EXP-01" for m in expired)
+    inc = db.get_incident("INC-EXP-01")
+    assert inc is not None
+    assert inc["current_state"] == "RESOLVED"
+    assert inc["incident_status"] == "RESOLVED"
 
 # ---------------------------------------------------------
 # 15. Escalation on Verification Failure Test
@@ -306,8 +351,9 @@ def test_escalation_logic():
 # ---------------------------------------------------------
 # 16. Incident Deduplication & Correlation Window Test
 # ---------------------------------------------------------
-def test_incident_deduplication(mock_threat_event_nested):
-    mgr = IncidentManager(correlation_window_seconds=10)
+def test_incident_deduplication(mock_threat_event_nested, tmp_path):
+    test_db = Database(db_path=str(tmp_path / "test_dedup.db"))
+    mgr = IncidentManager(db=test_db, correlation_window_seconds=10)
     data = dict(mock_threat_event_nested)
     data["source"] = {"ip": "172.16.50.99", "port": 4444}
     data["destination"] = {"ip": "10.0.0.99", "port": 80}
@@ -400,7 +446,13 @@ def test_end_to_end_pipeline(mock_threat_event_nested):
     # Verify DB state
     inc = manager.db.get_incident(decision.incident_id)
     assert inc is not None
-    assert inc["current_state"] in ("CONTAINED", "RESPONSE_STARTED")
+    assert inc["current_state"] == "MONITORING"
+
+    # Task 1 Acceptance: verifications table in SQLite must contain a row for that incident
+    ver = manager.db.get_verification(decision.incident_id)
+    assert ver is not None
+    assert ver["incident_id"] == decision.incident_id
+    assert ver["status"] == "SUCCESS"
     
     # Verify audit log trail
     audit_trail = manager.audit.get_trail(decision.incident_id)
@@ -409,3 +461,44 @@ def test_end_to_end_pipeline(mock_threat_event_nested):
     assert "RISK_CALCULATED" in event_types
     assert "POLICY_MATCHED" in event_types
     assert "DECISION_CREATED" in event_types
+
+def test_benign_traffic_resolves_directly():
+    """Task 2 Acceptance: Benign traffic event must end with incident.current_state == 'RESOLVED'."""
+    manager = DecisionManager()
+    payload = {
+        "timestamp": "2026-09-06T00:00:00Z",
+        "attack_type": "Benign Traffic",
+        "confidence": 0.95,
+        "source_ip": "10.0.1.50",
+        "destination_ip": "10.0.0.5",
+        "packet_count": 20
+    }
+    decision = manager.process(payload)
+    assert decision.decision == DecisionType.ALLOW
+    inc = manager.db.get_incident(decision.incident_id)
+    assert inc is not None
+    assert inc["current_state"] == "RESOLVED"
+
+def test_automated_containment_verification_failure_escalates(mock_threat_event_nested, monkeypatch):
+    """Task 1 Acceptance: If verification fails during automated containment, incident escalates."""
+    from decision_engine.models.verification import VerificationResult, VerificationStatus
+
+    manager = DecisionManager()
+
+    def mock_verify(*args, **kwargs):
+        return VerificationResult(
+            incident_id="INC-FAIL-TEST",
+            target="192.168.1.105",
+            status=VerificationStatus.FAILED,
+            baseline_pps=5000.0,
+            observed_pps=4500.0,
+            reduction_percentage=10.0,
+            reason="Traffic rate still above threshold"
+        )
+
+    monkeypatch.setattr(manager.verification_engine, "verify_mitigation", mock_verify)
+    decision = manager.process(mock_threat_event_nested)
+    inc = manager.db.get_incident(decision.incident_id)
+    assert inc is not None
+    assert inc["current_state"] == "ESCALATED"
+

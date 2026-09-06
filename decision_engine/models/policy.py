@@ -3,7 +3,7 @@ from typing import List, Optional, Dict, Any
 
 class PolicyConditions(BaseModel):
     attack_type: Optional[List[str]] = None
-    confidence: Optional[Dict[str, float]] = None # {"minimum": 0.85}
+    confidence: Optional[Dict[str, float]] = None # e.g. {"minimum": HIGH_CONFIDENCE_THRESHOLD}
     risk: Optional[Dict[str, float]] = None       # {"minimum": 70.0}
 
 class PolicyDefinition(BaseModel):

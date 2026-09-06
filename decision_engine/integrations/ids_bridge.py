@@ -10,16 +10,12 @@ import pandas as pd
 import joblib
 
 from decision_engine.models.threat_event import ThreatEvent
+from decision_engine.ml.detector import ThreatDetector
 
 logger = logging.getLogger("IDSBridge")
 
-# Target monitored assets in the SOC environment
-MONITORED_ASSETS = [
-    {"ip": "10.0.0.5", "name": "Core-Database-Cluster", "criticality": "HIGH", "ports": [3306, 5432, 1433, 22]},
-    {"ip": "10.0.0.12", "name": "DMZ-Web-Gateway", "criticality": "MEDIUM", "ports": [80, 443, 8080]},
-    {"ip": "10.0.0.1", "name": "Enterprise-Domain-Controller", "criticality": "CRITICAL", "ports": [53, 88, 389, 445]},
-    {"ip": "10.0.0.25", "name": "Internal-API-Service", "criticality": "MEDIUM", "ports": [8000, 8443]}
-]
+from decision_engine.context.registries import MONITORED_ASSETS, PERSISTENT_ATTACKER_IPS, PERSISTENT_TARGET_MAP
+from decision_engine.config.constants import get_confidence_level, now_ist_iso
 
 # External IP subnets to synthesize realistic threat actors
 EXTERNAL_ATTACKER_SUBNETS = [
@@ -36,113 +32,74 @@ class IDSBridge:
     Bridge connecting the upstream AI/ML Intrusion Detection System (IDS)
     to the Smart SOC Decision Engine.
     
-    Consumes network flow telemetry from L:\\AimlProject\\ids_project,
-    runs inference via the trained RandomForest model, and normalizes detections
-    into strongly-typed ThreatEvent instances.
+    Consumes network flow telemetry, runs inference via the integrated
+    ThreatDetector, and normalizes detections into strongly-typed ThreatEvent instances.
     """
     def __init__(self, ids_project_dir: Optional[str] = None):
-        if ids_project_dir is None:
-            # Check environment variable first
-            env_dir = os.environ.get("IDS_PROJECT_DIR")
-            if env_dir and os.path.exists(os.path.join(env_dir, "model.pkl")):
-                ids_project_dir = env_dir
-            else:
-                # Check cross-platform candidate locations across macOS / Apple Silicon and Windows
-                here = os.path.dirname(os.path.abspath(__file__))
-                candidates = [
-                    r"L:\AimlProject\ids_project",
-                    os.path.abspath(os.path.join(here, "..", "..", "ids_project")),
-                    os.path.abspath(os.path.join(here, "..", "..", "..", "AimlProject", "ids_project")),
-                    os.path.abspath(os.path.join(here, "..", "..", "..", "ids_project")),
-                    os.path.expanduser("~/AimlProject/ids_project"),
-                    os.path.expanduser("~/ids_project"),
-                    os.path.expanduser("~/Developer/AimlProject/ids_project"),
-                    os.path.expanduser("~/Documents/AimlProject/ids_project"),
-                    "/tmp/ids_project"
-                ]
-                for cand in candidates:
-                    if os.path.exists(os.path.join(cand, "model.pkl")):
-                        ids_project_dir = cand
-                        break
-                if not ids_project_dir:
-                    ids_project_dir = candidates[0]
-
-        self.project_dir = os.path.abspath(ids_project_dir)
-        self.model_path = os.path.join(self.project_dir, "model.pkl")
-        self.encoder_path = os.path.join(self.project_dir, "label_encoder.pkl")
-        self.scaler_path = os.path.join(self.project_dir, "scaler.pkl")
-        self.features_path = os.path.join(self.project_dir, "feature_names.pkl")
-        self.dataset_dir = os.path.join(self.project_dir, "dataset")
-        
-        self.model = None
-        self.encoder = None
-        self.scaler = None
-        self.feature_names = None
+        self.detector = ThreatDetector(artifacts_dir=ids_project_dir)
+        self.project_dir = self.detector.artifacts_dir
+        self.model_path = self.detector.model_path
+        self.encoder_path = self.detector.encoder_path
+        self.scaler_path = self.detector.scaler_path
+        self.features_path = self.detector.features_path
+        self.dataset_dir = self.detector.dataset_dir
         self._cached_df = None
-        
-        self.load_artifacts()
+
+    @property
+    def model(self):
+        return self.detector.model
+
+    @model.setter
+    def model(self, value):
+        self.detector.model = value
+
+    @property
+    def encoder(self):
+        return self.detector.encoder
+
+    @encoder.setter
+    def encoder(self, value):
+        self.detector.encoder = value
+
+    @property
+    def scaler(self):
+        return self.detector.scaler
+
+    @scaler.setter
+    def scaler(self, value):
+        self.detector.scaler = value
+
+    @property
+    def feature_names(self):
+        return self.detector.feature_names
+
+    @feature_names.setter
+    def feature_names(self, value):
+        self.detector.feature_names = value
 
     def load_artifacts(self) -> bool:
-        """Loads model weights, scaler, encoder, and feature names."""
-        try:
-            if os.path.exists(self.model_path):
-                self.model = joblib.load(self.model_path)
-            if os.path.exists(self.encoder_path):
-                self.encoder = joblib.load(self.encoder_path)
-            if os.path.exists(self.scaler_path):
-                self.scaler = joblib.load(self.scaler_path)
-            if os.path.exists(self.features_path):
-                self.feature_names = joblib.load(self.features_path)
-                
-            logger.info("Successfully loaded IDS model artifacts from %s", self.project_dir)
-            return True
-        except Exception as e:
-            logger.error("Failed to load IDS artifacts: %s", e)
-            return False
+        """Loads model weights, scaler, encoder, and feature names via ThreatDetector."""
+        return self.detector.load_artifacts()
 
     @property
     def is_ready(self) -> bool:
         """Returns True if the ML model and all required transformers are loaded."""
-        return all([self.model is not None, self.encoder is not None, self.scaler is not None, self.feature_names is not None])
+        return self.detector.is_ready
 
     def predict_flow(self, flow_data: Union[pd.Series, Dict[str, Any]]) -> Tuple[str, float, Optional[str]]:
         """
-        Runs ML inference on a network flow.
+        Runs ML inference on a network flow using the native ThreatDetector.
         
         Returns:
             (predicted_attack_type, confidence_score, actual_label_if_available)
         """
-        if not self.is_ready:
-            raise RuntimeError("IDS artifacts not fully loaded. Call load_artifacts() first.")
-
         actual_label = None
         if isinstance(flow_data, pd.Series):
             actual_label = flow_data.get("Attack Name") or flow_data.get("Label")
-            flow_dict = flow_data.to_dict()
-        else:
-            flow_dict = dict(flow_data)
-            actual_label = flow_dict.get("Attack Name") or flow_dict.get("Label")
+        elif isinstance(flow_data, dict):
+            actual_label = flow_data.get("Attack Name") or flow_data.get("Label")
 
-        # Extract only the 73 required features in precise order
-        features_vec = []
-        for feat in self.feature_names:
-            val = flow_dict.get(feat, 0.0)
-            try:
-                val = float(val)
-                if np.isnan(val) or np.isinf(val):
-                    val = 0.0
-            except (ValueError, TypeError):
-                val = 0.0
-            features_vec.append(val)
-
-        X_df = pd.DataFrame([features_vec], columns=self.feature_names)
-        X_scaled = self.scaler.transform(X_df)
-
-        proba = self.model.predict_proba(X_scaled)[0]
-        max_idx = int(np.argmax(proba))
-        confidence = float(proba[max_idx])
-        predicted_attack = str(self.encoder.classes_[max_idx])
-
+        predicted_attack, confidence, _ = self.detector.predict_flow(flow_data)
         return predicted_attack, confidence, actual_label
 
     def flow_to_threat_event(
@@ -203,19 +160,28 @@ class IDSBridge:
             if predicted_attack == "Benign Traffic":
                 source_ip = f"10.0.1.{random.randint(10, 200)}"
             else:
-                subnet = random.choice(EXTERNAL_ATTACKER_SUBNETS)
-                source_ip = f"{subnet}{random.randint(1, 254)}"
+                persistent_pool = PERSISTENT_ATTACKER_IPS.get(predicted_attack, PERSISTENT_ATTACKER_IPS.get("default", []))
+                # 70% probability reuse persistent attacker IP to exercise correlation, 30% random
+                if persistent_pool and random.random() < 0.70:
+                    source_ip = random.choice(persistent_pool)
+                else:
+                    subnet = random.choice(EXTERNAL_ATTACKER_SUBNETS)
+                    source_ip = f"{subnet}{random.randint(1, 254)}"
 
         if not destination_ip:
-            target_asset = random.choice(MONITORED_ASSETS)
-            destination_ip = target_asset["ip"]
-            if dst_port in (0, 80, 8080):
+            if source_ip in PERSISTENT_TARGET_MAP:
+                destination_ip = PERSISTENT_TARGET_MAP[source_ip]
+                target_asset = next((a for a in MONITORED_ASSETS if a["ip"] == destination_ip), None)
+            else:
+                target_asset = random.choice(MONITORED_ASSETS)
+                destination_ip = target_asset["ip"]
+            if target_asset and dst_port in (0, 80, 8080):
                 dst_port = random.choice(target_asset["ports"])
 
-        conf_level = "HIGH" if confidence >= 0.85 else ("MEDIUM" if confidence >= 0.60 else "LOW")
+        conf_level = get_confidence_level(confidence)
 
         payload = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": now_ist_iso(),
             "source": {
                 "ip": source_ip,
                 "port": src_port
@@ -245,12 +211,12 @@ class IDSBridge:
 
         return ThreatEvent(**payload)
 
-    def load_dataset_samples(self, n_per_class: int = 5) -> pd.DataFrame:
+    def load_dataset_samples(self, n_per_class: int = 5, force_reload: bool = False) -> pd.DataFrame:
         """
         Loads cached flow samples from the dataset for simulation and live testing.
         Samples evenly across attack types.
         """
-        if self._cached_df is not None:
+        if self._cached_df is not None and not force_reload and len(self._cached_df) >= (n_per_class * 8):
             return self._cached_df
 
         csv_files = glob.glob(os.path.join(self.dataset_dir, "*.csv"))
@@ -259,17 +225,16 @@ class IDSBridge:
 
         dfs = []
         for csv_path in csv_files:
-            df = pd.read_csv(csv_path, nrows=5000)
+            df = pd.read_csv(csv_path)
             df.columns = df.columns.str.strip()
-            if "Attack Name" in df.columns:
-                grouped = df.groupby("Attack Name", group_keys=False).apply(
-                    lambda g: g.sample(min(len(g), n_per_class))
-                )
-                dfs.append(grouped)
+            label_col = next((c for c in ["Multi_Label", "Attack Name", "Label"] if c in df.columns), None)
+            if label_col:
+                samples = [g.sample(min(len(g), n_per_class), random_state=42) for _, g in df.groupby(label_col)]
+                dfs.append(pd.concat(samples, ignore_index=True))
             else:
                 dfs.append(df.head(50))
 
-        combined = pd.concat(dfs, ignore_index=True).sample(frac=1).reset_index(drop=True)
+        combined = pd.concat(dfs, ignore_index=True).sample(frac=1, random_state=42).reset_index(drop=True)
         self._cached_df = combined
         return combined
 
@@ -282,11 +247,14 @@ class IDSBridge:
         """
         Yields (ThreatEvent, flow_metadata) tuples sampled from the real IDS dataset.
         """
-        df = self.load_dataset_samples(n_per_class=10)
+        df = self.load_dataset_samples(n_per_class=max(10, (n_samples // 4) + 1))
         if attack_type_filter and "Attack Name" in df.columns:
             df = df[df["Attack Name"] == attack_type_filter]
 
-        sample_rows = df.head(n_samples)
+        if len(df) < n_samples:
+            sample_rows = df.sample(n=n_samples, replace=True)
+        else:
+            sample_rows = df.head(n_samples)
         for idx, row in sample_rows.iterrows():
             pred, conf, actual = self.predict_flow(row)
             threat_event = self.flow_to_threat_event(row, predicted_attack=pred, confidence=conf)

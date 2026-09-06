@@ -18,13 +18,24 @@ class RecoveryManager:
         """
         Scans active mitigations in DB and marks expired ones as EXPIRED / ROLLED_BACK.
         """
-        now = datetime.now(timezone.utc).isoformat()
+        now_dt = datetime.now(timezone.utc)
         active = self.db.get_active_mitigations()
         expired = []
 
         for mit in active:
             expires_at = mit.get("expires_at")
-            if expires_at and expires_at <= now:
+            if not expires_at:
+                continue
+            is_expired = False
+            try:
+                exp_dt = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+                if exp_dt.tzinfo is None:
+                    exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+                is_expired = (exp_dt <= now_dt)
+            except Exception:
+                is_expired = (expires_at <= now_dt.isoformat())
+
+            if is_expired:
                 action_id = mit["action_id"]
                 incident_id = mit["incident_id"]
                 target = mit["target"]
@@ -34,7 +45,12 @@ class RecoveryManager:
                 
                 # Check incident
                 inc = self.db.get_incident(incident_id)
-                if inc and inc.get("current_state") == IncidentState.CONTAINED.value:
+                if inc and inc.get("current_state") in [
+                    IncidentState.CONTAINED.value,
+                    IncidentState.MONITORING.value,
+                    "CONTAINED",
+                    "MONITORING"
+                ]:
                     inc["current_state"] = IncidentState.RESOLVED.value
                     inc["incident_status"] = "RESOLVED"
                     inc["recommended_action"] = "Mitigation window elapsed safely. Threat resolved."

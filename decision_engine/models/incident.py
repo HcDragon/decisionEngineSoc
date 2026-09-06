@@ -4,6 +4,8 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 import uuid
 
+from decision_engine.config.constants import now_ist_iso
+
 class IncidentState(str, Enum):
     DETECTED = "DETECTED"
     TRIAGING = "TRIAGING"
@@ -24,8 +26,8 @@ class IncidentRecord(BaseModel):
 
     incident_id: str = Field(default_factory=lambda: f"INC-{uuid.uuid4().hex[:8]}")
     event_id: str
-    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    created_at: str = Field(default_factory=now_ist_iso)
+    updated_at: str = Field(default_factory=now_ist_iso)
     
     source_ip: str
     destination_ip: str

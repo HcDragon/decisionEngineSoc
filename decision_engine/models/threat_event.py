@@ -3,6 +3,8 @@ from typing import Optional, Dict, Any
 from datetime import datetime, timezone
 import uuid
 
+from decision_engine.config.constants import get_confidence_level, now_ist_iso
+
 class EndpointInfo(BaseModel):
     ip: str
     port: int = 0
@@ -30,7 +32,7 @@ class ThreatEvent(BaseModel):
     Validates incoming events and provides backwards compatibility with legacy flat payloads.
     """
     event_id: str = Field(default_factory=lambda: f"EVT-{uuid.uuid4().hex[:12]}")
-    timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = Field(default_factory=now_ist_iso)
     source: EndpointInfo
     destination: EndpointInfo
     network: NetworkInfo
@@ -54,7 +56,7 @@ class ThreatEvent(BaseModel):
             if conf_val > 1.0:
                 conf_val = conf_val / 100.0
                 
-            conf_lvl = "HIGH" if conf_val >= 0.85 else ("MEDIUM" if conf_val >= 0.50 else "LOW")
+            conf_lvl = get_confidence_level(conf_val)
             
             pkt_count = int(data.get("packet_count", 0))
             duration = float(data.get("flow_duration", 0.0))
@@ -63,7 +65,7 @@ class ThreatEvent(BaseModel):
 
             normalized = {
                 "event_id": data.get("event_id") or f"EVT-{uuid.uuid4().hex[:12]}",
-                "timestamp": data.get("timestamp") or datetime.now(timezone.utc).isoformat(),
+                "timestamp": data.get("timestamp") or now_ist_iso(),
                 "source": {"ip": src_ip, "port": src_port},
                 "destination": {"ip": dest_ip, "port": dest_port},
                 "network": {

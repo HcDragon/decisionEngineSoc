@@ -12,7 +12,7 @@ Create a python script in the root directory (e.g., `simulate.py`):
 
 ```python
 import json
-from core.engine import DecisionManager
+from decision_engine.decision.decision_manager import DecisionManager
 
 engine = DecisionManager()
 

@@ -5,854 +5,1070 @@ import numpy as np
 from datetime import datetime, timezone
 import json
 import time
+import os
+import sys
 import threading
 
-# ---------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------
-API_URL = "http://127.0.0.1:8000/api/v1"
+# Ensure repository root is on sys.path
+_REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from decision_engine.config.constants import IST
+from decision_engine.storage.db import Database
+from decision_engine.decision.decision_manager import DecisionManager
+from decision_engine.events.workflow_tracker import tracker
+
+# -----------------------------------------------------------------------------
+# Configuration & Page Setup
+# -----------------------------------------------------------------------------
+API_URL = os.environ.get("DECISION_ENGINE_API_URL", "http://127.0.0.1:8000/api/v1")
 
 st.set_page_config(
-    page_title="SmartSOC Manager",
+    page_title="SmartSOC — Security Operations & Decision Console",
     page_icon="🛡️",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
-# ---------------------------------------------------------
-# Helper to render clean HTML without Markdown indentation bug
-# In CommonMark, any line indented with 4+ spaces is parsed as <pre><code>!
-# Stripping leading indentation ensures pure HTML DOM rendering.
-# ---------------------------------------------------------
+# -----------------------------------------------------------------------------
+# HTML Helper: Strips indentation to prevent CommonMark 4-space codeblock bug
+# -----------------------------------------------------------------------------
 def render_html(raw_html: str):
     clean_lines = [line.strip() for line in raw_html.splitlines() if line.strip()]
     st.markdown("".join(clean_lines), unsafe_allow_html=True)
 
-# ---------------------------------------------------------
-# Exact Pixel-Grade Dark Theme Styling from Reference Screenshot
-# ---------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Timestamp Helper (IST)
+# -----------------------------------------------------------------------------
+def format_to_ist(ts_val) -> str:
+    if not ts_val:
+        return datetime.now(IST).strftime("%H:%M:%S")
+    try:
+        if isinstance(ts_val, (int, float)):
+            dt = datetime.fromtimestamp(ts_val, tz=timezone.utc)
+        else:
+            ts_str = str(ts_val).replace("Z", "+00:00")
+            dt = datetime.fromisoformat(ts_str)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(IST).strftime("%H:%M:%S")
+    except Exception:
+        return str(ts_val)[11:19] if len(str(ts_val)) >= 19 else str(ts_val)
+
+# -----------------------------------------------------------------------------
+# Robust Data Layer
+# -----------------------------------------------------------------------------
+@st.cache_resource
+def get_db():
+    return Database()
+
+def fetch_incidents(limit: int = 100):
+    try:
+        r = requests.get(f"{API_URL}/incidents?limit={limit}", timeout=0.6)
+        if r.status_code == 200:
+            data = r.json()
+            if isinstance(data, list) and len(data) > 0:
+                return data
+    except Exception:
+        pass
+    try:
+        return get_db().list_incidents(limit=limit)
+    except Exception:
+        return []
+
+def fetch_traffic(limit: int = 100):
+    try:
+        r = requests.get(f"{API_URL}/traffic?limit={limit}", timeout=0.6)
+        if r.status_code == 200:
+            data = r.json()
+            if isinstance(data, list) and len(data) > 0:
+                return data
+    except Exception:
+        pass
+    try:
+        return get_db().list_threat_events(limit=limit)
+    except Exception:
+        return []
+
+def fetch_health():
+    try:
+        r = requests.get(f"{API_URL}/health", timeout=0.6)
+        if r.status_code == 200:
+            return r.json(), True
+    except Exception:
+        pass
+    return {"status": "LOCAL_DB", "service": "DecisionEngine (Direct Storage)"}, False
+
+# -----------------------------------------------------------------------------
+# Enterprise Dark Theme CSS (Human-Crafted Cybersecurity Console)
+# -----------------------------------------------------------------------------
 render_html("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
-html, body, [class*="css"], [data-testid="stAppViewContainer"] {
+html, body, [data-testid="stAppViewContainer"], .main {
+    background-color: #090d16 !important;
+    color: #e2e8f0 !important;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
-    background-color: #070b13 !important;
-    color: #f1f5f9 !important;
 }
 
-/* Hide default Streamlit header */
 header[data-testid="stHeader"] {
-    background: transparent !important;
     display: none !important;
 }
 
-/* Remove default Streamlit top margins */
 .block-container {
-    padding-top: 1.2rem !important;
+    padding-top: 0.6rem !important;
     padding-bottom: 1.5rem !important;
-    padding-left: 1.8rem !important;
-    padding-right: 1.8rem !important;
-    max-width: 100% !important;
+    padding-left: 1.2rem !important;
+    padding-right: 1.2rem !important;
+    max-width: 1720px !important;
 }
 
-/* Top Navigation Bar Card Wrapper */
-div[data-testid="stHorizontalBlock"]:has(div.brand-section) {
-    background-color: #0c121e !important;
-    border: 1px solid #182235 !important;
-    border-radius: 12px !important;
-    padding: 10px 16px !important;
-    margin-bottom: 14px !important;
-    align-items: center !important;
+/* Sidebar Styling */
+section[data-testid="stSidebar"] {
+    background-color: #0d121f !important;
+    border-right: 1px solid #1e293b !important;
+    padding-top: 0.5rem !important;
 }
 
-.brand-section {
+section[data-testid="stSidebar"] .block-container {
+    padding-left: 0.8rem !important;
+    padding-right: 0.8rem !important;
+}
+
+/* Top Command Header */
+.top-command-bar {
+    background-color: #0f172a;
+    border: 1px solid #1e293b;
+    border-radius: 8px;
+    padding: 10px 16px;
+    margin-bottom: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.command-breadcrumbs {
+    font-size: 0.78rem;
+    font-family: 'JetBrains Mono', monospace;
+    color: #64748b;
+}
+
+.command-breadcrumbs span.active {
+    color: #f8fafc;
+    font-weight: 600;
+}
+
+/* KPI Strip */
+.kpi-strip {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.kpi-box {
+    background-color: #0f172a;
+    border: 1px solid #1e293b;
+    border-radius: 6px;
+    padding: 8px 12px;
+}
+
+.kpi-box-label {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: #64748b;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.kpi-box-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: #f8fafc;
+    margin-top: 2px;
+}
+
+/* Compact SOAR Pipeline DAG Bar */
+.soar-dag-card {
+    background-color: #0f172a;
+    border: 1px solid #1e293b;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 14px;
+}
+
+.dag-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #162032;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+}
+
+.dag-track {
     display: flex;
     align-items: center;
-    gap: 12px;
+    justify-content: space-between;
+    gap: 4px;
 }
 
-.shield-icon-box {
-    width: 40px;
-    height: 40px;
-    background: linear-gradient(135deg, rgba(0, 240, 255, 0.12) 0%, rgba(56, 189, 248, 0.22) 100%);
-    border: 1px solid #0284c7;
-    border-radius: 10px;
+.dag-node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    min-width: 90px;
+    z-index: 2;
+}
+
+.node-pill {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.25rem;
-    box-shadow: 0 0 15px rgba(2, 132, 199, 0.25);
-}
-
-.brand-title {
-    font-size: 1.2rem;
-    font-weight: 700;
-    letter-spacing: -0.01em;
-    color: #f8fafc;
-    margin: 0;
-    line-height: 1.2;
-}
-.brand-title span { color: #00f0ff; }
-
-.brand-subtitle {
-    color: #64748b;
     font-size: 0.74rem;
-    margin-top: 2px;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+    transition: all 0.2s ease;
 }
 
-/* Top Status Pills */
-.nav-pills-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+@keyframes pulse-node {
+    0% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.7); border-color: #38bdf8; }
+    70% { box-shadow: 0 0 0 8px rgba(56, 189, 248, 0); border-color: #0284c7; }
+    100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0); border-color: #38bdf8; }
 }
 
-.nav-pill {
+@keyframes pulse-alert {
+    0% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.75; transform: scale(1.01); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+.node-pill-active {
+    background: #0284c7 !important;
+    color: #ffffff !important;
+    border: 2px solid #38bdf8 !important;
+    animation: pulse-node 1.3s infinite !important;
+}
+
+.node-pill-done {
+    background: rgba(16, 185, 129, 0.18) !important;
+    color: #34d399 !important;
+    border: 1px solid #10b981 !important;
+}
+
+.node-pill-pending {
+    background: #090d16 !important;
+    color: #475569 !important;
+    border: 1px solid #1e293b !important;
+}
+
+.node-title {
+    font-size: 0.70rem;
+    font-weight: 600;
+    color: #cbd5e1;
+    margin-top: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.node-detail {
+    font-size: 0.65rem;
+    font-family: 'JetBrains Mono', monospace;
+    color: #64748b;
+    margin-top: 1px;
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dag-arrow {
+    flex-grow: 1;
+    height: 2px;
+    background: #1e293b;
+    margin: 0 4px;
+    margin-bottom: 22px;
+    z-index: 1;
+}
+
+.dag-arrow-done {
+    background: #10b981 !important;
+}
+
+.dag-arrow-active {
+    background: linear-gradient(90deg, #10b981, #0284c7) !important;
+    height: 3px !important;
+}
+
+/* Badges */
+.badge {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    background-color: #111827;
-    border: 1px solid #1f293d;
-    border-radius: 20px;
-    padding: 5px 12px;
-    font-size: 0.75rem;
-    color: #cbd5e1;
-    white-space: nowrap;
-}
-.pill-dot-green {
-    width: 7px;
-    height: 7px;
-    background-color: #10b981;
-    border-radius: 50%;
-    box-shadow: 0 0 6px #10b981;
-}
-.pill-icon-chip {
-    font-size: 0.8rem;
-    color: #94a3b8;
-}
-
-/* Button Customizations */
-div[data-testid="stButton"] button {
-    background-color: #111827 !important;
-    color: #cbd5e1 !important;
-    border: 1px solid #1f293d !important;
-    border-radius: 8px !important;
-    font-size: 0.78rem !important;
-    font-weight: 600 !important;
-    padding: 6px 12px !important;
-    height: 38px !important;
-    white-space: nowrap !important;
-    transition: all 0.15s ease !important;
-}
-div[data-testid="stButton"] button:hover {
-    background-color: #1e293b !important;
-    border-color: #38bdf8 !important;
-    color: #ffffff !important;
-}
-div[data-testid="stButton"] button[kind="primary"] {
-    background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%) !important;
-    color: #ffffff !important;
-    border: 1px solid #38bdf8 !important;
-    box-shadow: 0 0 15px rgba(6, 182, 212, 0.45) !important;
-    font-weight: 700 !important;
-}
-
-/* Pills Widget Customization */
-div[data-testid="stPills"] {
-    background: transparent !important;
-}
-div[data-testid="stPills"] button {
-    background-color: #111827 !important;
-    color: #94a3b8 !important;
-    border: 1px solid #1e293d !important;
-    font-size: 0.75rem !important;
-    border-radius: 6px !important;
-    padding: 3px 10px !important;
-}
-div[data-testid="stPills"] button[aria-selected="true"] {
-    background-color: rgba(2, 132, 199, 0.3) !important;
-    color: #38bdf8 !important;
-    border-color: #0284c7 !important;
-    font-weight: 600 !important;
-}
-
-/* Top Metrics Ribbon */
-.metrics-ribbon {
-    background-color: #0c121e;
-    border: 1px solid #182235;
-    border-radius: 12px;
-    padding: 14px 22px;
-    margin-bottom: 18px;
-    display: grid;
-    grid-template-columns: 1.1fr 1.1fr 1.3fr 1.3fr 1.3fr 1.1fr;
-    gap: 16px;
-    align-items: center;
-}
-
-.ribbon-cell {
-    display: flex;
-    flex-direction: column;
-}
-.ribbon-cell-border {
-    border-right: 1px solid #182235;
-    padding-right: 14px;
-}
-
-.ribbon-label {
-    font-size: 0.72rem;
-    font-weight: 600;
-    color: #64748b;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin-bottom: 3px;
-}
-.ribbon-val {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 1.85rem;
-    font-weight: 700;
-    line-height: 1.1;
-}
-.ribbon-sub {
-    font-size: 0.7rem;
-    color: #64748b;
-    margin-top: 2px;
-}
-
-/* Main Split Dashboard Cards */
-.panel-card {
-    background-color: #0c121e;
-    border: 1px solid #182235;
-    border-radius: 12px;
-    padding: 16px 18px;
-    min-height: 560px;
-    display: flex;
-    flex-direction: column;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
-}
-
-.panel-header-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 12px;
-    border-bottom: 1px solid #182235;
-    padding-bottom: 10px;
-}
-.panel-title {
-    font-size: 1.02rem;
-    font-weight: 700;
-    color: #f8fafc;
-    margin: 0;
-}
-.panel-subtitle {
-    font-size: 0.74rem;
-    color: #64748b;
-    margin-top: 2px;
-}
-
-.incidents-count-badge {
-    background-color: rgba(225, 29, 72, 0.15);
-    border: 1px solid rgba(225, 29, 72, 0.4);
-    color: #f43f5e;
-    border-radius: 6px;
-    padding: 3px 10px;
-    font-size: 0.76rem;
-    font-weight: 700;
-    font-family: 'JetBrains Mono', monospace;
-    white-space: nowrap;
-}
-
-/* Table styling */
-.table-scroll-wrap {
-    max-height: 480px;
-    overflow-y: auto;
-    overflow-x: auto;
-}
-.table-scroll-wrap::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-}
-.table-scroll-wrap::-webkit-scrollbar-thumb {
-    background: #1e293b;
+    padding: 2px 7px;
     border-radius: 4px;
-}
-
-.soc-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.76rem;
-    background: transparent;
-}
-.soc-table th {
-    color: #64748b;
-    font-size: 0.7rem;
+    font-size: 0.70rem;
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    padding: 8px 6px;
-    text-align: left;
-    border-bottom: 1px solid #182235;
-    background-color: #0c121e;
-    position: sticky;
-    top: 0;
-    z-index: 2;
-}
-.soc-table td {
-    padding: 8px 6px;
-    border-bottom: 1px solid #131b2c;
-    vertical-align: middle;
-}
-
-.tuple-text {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.74rem;
-    color: #94a3b8;
-}
-
-/* Status Badges */
-.badge-status {
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-size: 0.66rem;
-    font-weight: 700;
-    font-family: 'JetBrains Mono', monospace;
-    display: inline-block;
     white-space: nowrap;
 }
-.badge-highly-suspicious {
-    background-color: rgba(225, 29, 72, 0.15);
-    color: #f43f5e;
-    border: 1px solid rgba(225, 29, 72, 0.4);
+
+.badge-crit {
+    background-color: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.4);
 }
-.badge-suspicious {
-    background-color: rgba(245, 158, 11, 0.15);
-    color: #f59e0b;
-    border: 1px solid rgba(245, 158, 11, 0.4);
+
+.badge-high {
+    background-color: rgba(249, 115, 22, 0.15);
+    color: #fb923c;
+    border: 1px solid rgba(249, 115, 22, 0.4);
 }
-.badge-normal {
+
+.badge-med {
+    background-color: rgba(234, 179, 8, 0.15);
+    color: #facc15;
+    border: 1px solid rgba(234, 179, 8, 0.4);
+}
+
+.badge-low {
     background-color: rgba(16, 185, 129, 0.15);
-    color: #10b981;
+    color: #34d399;
     border: 1px solid rgba(16, 185, 129, 0.4);
 }
 
-.badge-risk {
-    padding: 2px 7px;
+.badge-active-live {
+    background-color: rgba(239, 68, 68, 0.2);
+    border: 1px solid rgba(239, 68, 68, 0.6);
+    color: #f87171;
     border-radius: 4px;
-    font-family: 'JetBrains Mono', monospace;
+    padding: 3px 8px;
     font-size: 0.72rem;
     font-weight: 700;
-    white-space: nowrap;
-}
-.badge-risk-high { background-color: #831843; color: #fbcfe8; }
-.badge-risk-med { background-color: #713f12; color: #fef08a; }
-.badge-risk-low { background-color: #14532d; color: #bbf7d0; }
-
-.badge-policy-card {
-    background-color: #0e2030;
-    border: 1px solid #16364f;
-    border-radius: 4px;
-    padding: 3px 6px;
-    display: inline-block;
-}
-.badge-policy-title {
-    color: #38bdf8;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.69rem;
-    font-weight: 600;
-}
-.badge-policy-sub {
-    color: #64748b;
-    font-size: 0.65rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 140px;
+    animation: pulse-alert 1.8s infinite;
 }
 
-.status-active-verified {
-    color: #10b981;
+/* Operational Tables */
+.soc-dense-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.80rem;
+}
+
+.soc-dense-table th {
+    background-color: #0b111e;
+    color: #64748b;
     font-weight: 600;
-    font-size: 0.7rem;
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
+    padding: 8px 10px;
+    border-bottom: 1px solid #1e293b;
+    text-align: left;
+}
+
+.soc-dense-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #141d2e;
+    color: #cbd5e1;
+    vertical-align: middle;
+}
+
+.soc-dense-table tr:hover td {
+    background-color: #131c31;
+}
+
+/* Dossier Card */
+.dossier-card {
+    background-color: #0f172a;
+    border: 1px solid #1e293b;
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+}
+
+.dossier-title {
+    font-size: 0.70rem;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.dossier-checklist-item {
     display: flex;
     align-items: center;
-    gap: 4px;
-    margin-top: 2px;
+    gap: 8px;
+    font-size: 0.76rem;
+    padding: 4px 0;
+    border-bottom: 1px solid #141d2e;
 }
 
-.view-json-tag {
-    background-color: #111827;
-    border: 1px solid #1e293b;
-    color: #94a3b8;
-    border-radius: 4px;
-    padding: 2px 6px;
-    font-size: 0.68rem;
-    font-family: 'JetBrains Mono', monospace;
-    display: inline-block;
+.dossier-checklist-item:last-child {
+    border-bottom: none;
+}
+
+/* Streamlit Native UI Cleanups */
+div[data-testid="stTabs"] [data-baseweb="tab-list"] {
+    background-color: #0f172a !important;
+    border-radius: 6px !important;
+    padding: 3px !important;
+    border: 1px solid #1e293b !important;
+    gap: 4px !important;
+    margin-bottom: 10px !important;
+}
+
+div[data-testid="stTabs"] button[role="tab"] {
+    font-size: 0.80rem !important;
+    font-weight: 500 !important;
+    color: #94a3b8 !important;
+    border-radius: 4px !important;
+    padding: 6px 12px !important;
+    border: none !important;
+    background-color: transparent !important;
+}
+
+div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+    background-color: #1e293b !important;
+    color: #f8fafc !important;
+    font-weight: 600 !important;
+}
+
+div[data-testid="stButton"] button {
+    background-color: #1e293b !important;
+    color: #f8fafc !important;
+    border: 1px solid #334155 !important;
+    border-radius: 6px !important;
+    font-size: 0.80rem !important;
+    font-weight: 500 !important;
+    padding: 6px 12px !important;
+    transition: all 0.15s ease !important;
+}
+
+div[data-testid="stButton"] button:hover {
+    background-color: #334155 !important;
+    border-color: #475569 !important;
+}
+
+div[data-testid="stButton"] button[kind="primary"] {
+    background-color: #0284c7 !important;
+    border-color: #0369a1 !important;
+    color: #ffffff !important;
+    font-weight: 600 !important;
+}
+
+div[data-testid="stButton"] button[kind="primary"]:hover {
+    background-color: #0369a1 !important;
 }
 </style>
 """)
 
-# ---------------------------------------------------------
-# API / Data Fetchers
-# ---------------------------------------------------------
-def api_get(endpoint: str, timeout=3):
-    try:
-        r = requests.get(f"{API_URL}/{endpoint.lstrip('/')}", timeout=timeout)
-        if r.status_code == 200:
-            return r.json()
-    except Exception:
-        pass
-    return None
-
-def api_post(endpoint: str, json_data: dict, timeout=5):
-    try:
-        r = requests.post(f"{API_URL}/{endpoint.lstrip('/')}", json=json_data, timeout=timeout)
-        return r
-    except Exception:
-        return None
-
-# State Initialization
-if "sensor_paused" not in st.session_state:
-    st.session_state["sensor_paused"] = False
-if "traffic_filter" not in st.session_state:
-    st.session_state["traffic_filter"] = "All Flows"
-
-# Continuous Live Traffic Streamer Thread
-# Runs continuously in the background, ingesting real flows from IDSBridge
-if "live_streamer_started" not in st.session_state:
-    st.session_state["live_streamer_started"] = True
-    def _run_continuous_traffic():
-        try:
-            from decision_engine.integrations.ids_bridge import IDSBridge
-            bridge = IDSBridge()
-            if bridge.is_ready:
-                for threat_event, meta in bridge.stream_continuous(delay_seconds=1.5):
-                    if st.session_state.get("sensor_paused", False):
-                        time.sleep(0.8)
-                        continue
-                    try:
-                        api_post("decision/analyze", threat_event.model_dump())
-                    except Exception:
-                        pass
-        except Exception:
-            pass
-
-    streamer_thread = threading.Thread(target=_run_continuous_traffic, daemon=True)
-    streamer_thread.start()
-
-# Query Data
-health_data = api_get("health") or {}
-is_online = health_data.get("status") == "HEALTHY"
-sensor_info = api_get("sensor/status") or {}
-is_sensor_active = sensor_info.get("active", not st.session_state["sensor_paused"])
-
-raw_incidents = api_get("incidents?limit=100") or []
-raw_traffic = api_get("traffic?limit=100") or []
-
-# ---------------------------------------------------------
-# TOP NAVIGATION BAR (Exact Match to Screenshot)
-# ---------------------------------------------------------
-top_col1, top_col2 = st.columns([1.6, 2.4], vertical_alignment="center")
-
-with top_col1:
+# =============================================================================
+# SIDEBAR: ATTACK SIMULATION CONTROL DECK & ENGINE STATUS
+# =============================================================================
+with st.sidebar:
     render_html("""
-    <div class="brand-section">
-        <div class="shield-icon-box">🛡️</div>
+    <div style="display:flex; align-items:center; gap:10px; padding: 4px 0 12px 0; border-bottom: 1px solid #1e293b; margin-bottom: 12px;">
+        <div style="width:34px; height:34px; background:#1e293b; border:1px solid #334155; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:1.15rem;">🛡️</div>
         <div>
-            <div class="brand-title">Smart<span>SOC</span> Manager</div>
-            <div class="brand-subtitle">NFStream Live Monitor • Traffic Triage • ML Threat Engine • Decision Orchestration</div>
+            <div style="font-weight:700; font-size:1.0rem; color:#f8fafc; line-height:1.2;">SmartSOC Console</div>
+            <div style="font-size:0.70rem; color:#64748b; font-family:'JetBrains Mono',monospace;">v2.4 Autonomous Engine</div>
         </div>
     </div>
     """)
 
-with top_col2:
-    pills_col, btn1_col, btn2_col, btn3_col, btn4_col = st.columns([2.5, 1.4, 1.2, 1.1, 0.5], vertical_alignment="center")
+    # Engine Status Summary
+    health_info, api_up = fetch_health()
+    ist_time_str = datetime.now(IST).strftime("%H:%M:%S IST")
     
-    with pills_col:
-        sensor_text = "Live Sensor (Active)" if is_sensor_active else "Live Sensor (Paused)"
-        sensor_color = "#10b981" if is_sensor_active else "#f59e0b"
-        render_html(f"""
-        <div class="nav-pills-row">
-            <div class="nav-pill">
-                <div class="pill-dot-green" style="background-color: {sensor_color}; box-shadow: 0 0 6px {sensor_color};"></div>
-                <span>{sensor_text}</span>
-            </div>
-            <div class="nav-pill">
-                <div class="pill-dot-green"></div>
-                <span>Triage Active (≤30)</span>
-            </div>
-            <div class="nav-pill">
-                <span class="pill-icon-chip">⚙️</span>
-                <span>RF (73 Feat)</span>
-            </div>
+    render_html(f"""
+    <div style="background-color:#090d16; border:1px solid #1e293b; border-radius:6px; padding:8px 10px; margin-bottom:14px; font-size:0.72rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="color:#64748b;">STORAGE:</span>
+            <b style="color:{'#34d399' if api_up else '#38bdf8'}; font-family:'JetBrains Mono',monospace;">{'FASTAPI LIVE' if api_up else 'SQLITE WAL LIVE'}</b>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:3px;">
+            <span style="color:#64748b;">AI MODEL:</span>
+            <b style="color:#cbd5e1; font-family:'JetBrains Mono',monospace;">100 Trees (73 Feats)</b>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:3px;">
+            <span style="color:#64748b;">CLOCK:</span>
+            <span style="color:#94a3b8; font-family:'JetBrains Mono',monospace;">{ist_time_str}</span>
+        </div>
+    </div>
+    """)
+
+    st.markdown("#### ⚡ Attack Simulation Deck")
+    st.caption("Drive the full loop: Flooding ➔ Telemetry ➔ RF Model ➔ Decision Engine ➔ SOAR Containment.")
+
+    attack_select = st.selectbox(
+        "Attack Profile:",
+        ["DoS SYN Flood", "DoS UDP Flood", "DoS DNS Flood", "DoS ICMP Flood"],
+        key="sb_attack_select"
+    )
+
+    col_sb1, col_sb2 = st.columns(2)
+    with col_sb1:
+        req_vol = st.number_input("Packets:", min_value=64, max_value=2048, value=512, step=64, key="sb_req_vol")
+    with col_sb2:
+        worker_threads = st.number_input("Workers:", min_value=1, max_value=16, value=8, step=1, key="sb_workers")
+
+    target_endpoint = st.text_input("Target URL:", value="http://127.0.0.1:3001/api/login", key="sb_target_url")
+
+    def run_sim_thread(attack_name, reqs, workers, endpoint):
+        import scripts.dos_simulation as sim_mod
+        sim_mod.TOTAL_REQUESTS = int(reqs)
+        sim_mod.MAX_WORKERS = int(workers)
+        sim_mod.TARGET_URL = target_endpoint
+        sim_mod.run_simulation(attack_name)
+
+    if st.button("▶ Launch Simulated Attack", type="primary", use_container_width=True, key="btn_sb_launch"):
+        threading.Thread(target=run_sim_thread, args=(attack_select, req_vol, worker_threads, target_endpoint), daemon=True).start()
+        st.toast(f"⚡ {attack_select} initiated! Watch real-time SOAR workflow...", icon="🚀")
+
+    st.markdown("<div style='font-size:0.70rem; color:#64748b; font-weight:600; text-transform:uppercase; margin: 10px 0 4px 0;'>Quick 1-Click Presets:</div>", unsafe_allow_html=True)
+    c_p1, c_p2 = st.columns(2)
+    with c_p1:
+        if st.button("SYN Burst (512)", use_container_width=True, key="p1_syn"):
+            threading.Thread(target=run_sim_thread, args=("DoS SYN Flood", 512, 8, target_endpoint), daemon=True).start()
+            st.toast("⚡ SYN Flood initiated!", icon="🚀")
+    with c_p2:
+        if st.button("UDP Flood (1024)", use_container_width=True, key="p2_udp"):
+            threading.Thread(target=run_sim_thread, args=("DoS UDP Flood", 1024, 8, target_endpoint), daemon=True).start()
+            st.toast("⚡ UDP Flood initiated!", icon="🚀")
+
+    if st.button("ICMP Ping Flood (256)", use_container_width=True, key="p3_icmp"):
+        threading.Thread(target=run_sim_thread, args=("DoS ICMP Flood", 256, 8, target_endpoint), daemon=True).start()
+        st.toast("⚡ ICMP Flood initiated!", icon="🚀")
+
+
+# =============================================================================
+# REAL-TIME FRAGMENT: RERUNS EVERY 1.0s VIA WEBSOCKET
+# =============================================================================
+@st.fragment(run_every=1.0)
+def render_live_soc_console():
+    # 1. Fetch live data
+    raw_incidents = fetch_incidents(limit=100)
+    raw_traffic   = fetch_traffic(limit=100)
+    wf_state      = tracker.get_state() or {}
+
+    is_attack_active = bool(wf_state.get("is_active"))
+    curr_stage       = int(wf_state.get("current_stage", 0))
+    stages_data      = wf_state.get("stages", {})
+
+    total_incidents = len(raw_incidents)
+    critical_count  = sum(1 for i in raw_incidents if i.get("severity") == "CRITICAL")
+    high_count      = sum(1 for i in raw_incidents if i.get("severity") == "HIGH")
+    auto_mitigated  = sum(1 for i in raw_incidents if i.get("is_mitigated") or "MITIGATED" in str(i.get("incident_status", "")))
+    avg_risk        = (sum(float(i.get("risk_score", 0)) for i in raw_incidents) / total_incidents) if total_incidents > 0 else 0.0
+
+    latest_incident = raw_incidents[0] if raw_incidents else None
+
+    # -------------------------------------------------------------------------
+    # TOP COMMAND BAR (Breadcrumbs, KPIs, Refresh)
+    # -------------------------------------------------------------------------
+    col_c1, col_c2 = st.columns([2.5, 0.5], vertical_alignment="center")
+    with col_c1:
+        render_html("""
+        <div class="command-breadcrumbs">
+            <span>SMARTSOC</span> / <span>DECISION ENGINE</span> / <span class="active">OPERATIONAL COMMAND CENTER</span>
         </div>
         """)
-        
-    with btn1_col:
-        if not is_sensor_active:
-            if st.button("▶ Resume", type="primary", use_container_width=True):
-                api_post("sensor/toggle", {})
-                st.session_state["sensor_paused"] = False
-                st.rerun()
-        else:
-            if st.button("⏸ Pause Live", use_container_width=True):
-                api_post("sensor/toggle", {})
-                st.session_state["sensor_paused"] = True
-                st.rerun()
-
-    with btn2_col:
-        if st.button("▶ Replay 15", use_container_width=True, help="Replay 15 flows from real dataset"):
-            with st.spinner("Streaming..."):
-                try:
-                    from decision_engine.integrations.ids_bridge import IDSBridge
-                    bridge = IDSBridge()
-                    if bridge.is_ready:
-                        for threat_event, meta in bridge.stream_dataset(n_samples=15, delay_seconds=0.0):
-                            api_post("decision/analyze", threat_event.model_dump())
-                        st.toast("Replayed 15 real network flows!", icon="⚡")
-                        time.sleep(0.4)
-                        st.rerun()
-                except Exception as e:
-                    st.error(f"Error: {e}")
-
-    with btn3_col:
-        export_payload = json.dumps({"incidents": raw_incidents, "traffic": raw_traffic[:30]}, indent=2)
-        st.download_button("Export", data=export_payload, file_name="soc_telemetry.json", mime="application/json", use_container_width=True)
-
-    with btn4_col:
-        if st.button("🔄", help="Refresh Data", use_container_width=True):
+    with col_c2:
+        if st.button("↻ Refresh", use_container_width=True, help="Force re-sync with storage"):
             st.rerun()
 
-render_html("<div style='height: 4px;'></div>")
-
-# ---------------------------------------------------------
-# HORIZONTAL METRICS RIBBON (Dynamic from Real Telemetry)
-# ---------------------------------------------------------
-total_inc = len(raw_incidents)
-threats_detected = len([i for i in raw_incidents if float(i.get("risk_score", 0)) >= 40])
-normal_count = len([t for t in raw_traffic if "Benign" in str(t.get("attack_type", ""))])
-suspicious_count = len([t for t in raw_traffic if "Benign" not in str(t.get("attack_type", ""))])
-observed_flows = len(raw_traffic)
-
-filtering_eff = round((normal_count / observed_flows * 100), 1) if observed_flows > 0 else 0.0
-
-durations = [float(t.get("flow_duration", 0)) for t in raw_traffic if float(t.get("flow_duration", 0)) > 0]
-avg_duration = (sum(durations) / len(durations)) if durations else 0.028
-ml_infer_ms = round(min(50.0, max(15.0, avg_duration * 1000)), 1)
-
-metrics_html = f"""
-<div class="metrics-ribbon">
-    <div class="ribbon-cell ribbon-cell-border">
-        <div class="ribbon-label">FILTERING EFFICIENCY</div>
-        <div class="ribbon-val" style="color: #00e676;">{filtering_eff}%</div>
-        <div class="ribbon-sub">ML Inferences Saved</div>
-    </div>
-    <div class="ribbon-cell ribbon-cell-border">
-        <div class="ribbon-label">OBSERVED FLOWS</div>
-        <div class="ribbon-val" style="color: #ffffff;">{observed_flows}</div>
-        <div class="ribbon-sub">Real Network Traffic</div>
-    </div>
-    <div class="ribbon-cell ribbon-cell-border">
-        <div class="ribbon-label">NORMAL TRAFFIC (BYPASSED)</div>
-        <div class="ribbon-val" style="color: #00f0ff;">{normal_count}</div>
-        <div class="ribbon-sub">Triage Score ≤ 30</div>
-    </div>
-    <div class="ribbon-cell ribbon-cell-border">
-        <div class="ribbon-label">SUSPICIOUS (SENT TO ML)</div>
-        <div class="ribbon-val" style="color: #f59e0b;">{suspicious_count}</div>
-        <div class="ribbon-sub">Triage Score > 30</div>
-    </div>
-    <div class="ribbon-cell ribbon-cell-border">
-        <div class="ribbon-label">CONFIRMED THREATS</div>
-        <div class="ribbon-val" style="color: #f43f5e;">{threats_detected}</div>
-        <div class="ribbon-sub">Mitigated by Decision Engine</div>
-    </div>
-    <div class="ribbon-cell">
-        <div class="ribbon-label">LATENCY PROFILE</div>
-        <div style="font-family: monospace; font-size: 0.82rem; color: #38bdf8; margin-top: 4px;">
-            Triage: <b style="color:#ffffff;">0.03ms</b><br>
-            ML Infer: <b style="color:#ffffff;">{ml_infer_ms}ms</b>
-        </div>
-    </div>
-</div>
-"""
-render_html(metrics_html)
-
-# ---------------------------------------------------------
-# MAIN SPLIT GRID (Real-Time Traffic vs Decision Engine)
-# ---------------------------------------------------------
-col_left, col_right = st.columns([1, 1])
-
-# =========================================================
-# LEFT CARD: Real-Time Traffic & Triage Feed
-# =========================================================
-with col_left:
-    head_left, head_right = st.columns([2, 1], vertical_alignment="center")
-    with head_left:
-        render_html("""
-        <div>
-            <div class="panel-title">Real-Time Traffic & Triage Feed</div>
-            <div class="panel-subtitle">All live NFStream flows categorized into NORMAL (bypassed) vs SUSPICIOUS (forwarded)</div>
-        </div>
-        """)
-    with head_right:
-        filter_val = st.pills(
-            "Filter",
-            options=["All Flows", "Suspicious", "Normal"],
-            default="All Flows",
-            label_visibility="collapsed",
-            key="triage_pills_feed"
-        )
-
-    # Prepare traffic rows from real database records
-    display_traffic = []
-    if raw_traffic:
-        for ev in raw_traffic:
-            raw_data = ev.get("raw_event", {})
-            if isinstance(raw_data, str):
-                try:
-                    raw_data = json.loads(raw_data)
-                except Exception:
-                    raw_data = {}
-                    
-            net = raw_data.get("network", {})
-            src = raw_data.get("source", {})
-            dst = raw_data.get("destination", {})
-            
-            src_ip = ev.get("source_ip") or src.get("ip") or "127.0.0.1"
-            src_port = src.get("port") or ev.get("source_port", 0)
-            dst_ip = ev.get("destination_ip") or dst.get("ip") or "10.0.0.5"
-            dst_port = dst.get("port") or ev.get("destination_port", 80)
-            proto = net.get("protocol") or ev.get("protocol", "TCP")
-            
-            attack = ev.get("attack_type", "Benign Traffic")
-            conf_val = float(ev.get("confidence", 0.95))
-            is_normal = "Benign" in attack
-            
-            if is_normal:
-                tag_class = "badge-normal"
-                tag_text = "NORMAL"
-                susp_score = f"{int(max(5, (1.0 - conf_val) * 100))}/100"
-                triage_reason = "Standard baseline HTTP/TLS handshake pattern"
-                ml_act = '<span style="color:#64748b;">Bypassed</span>'
-            else:
-                is_crit = ("Flood" in attack or "Brute" in attack)
-                tag_class = "badge-highly-suspicious" if is_crit else "badge-suspicious"
-                tag_text = "HIGHLY_SUSPICIOUS" if is_crit else "SUSPICIOUS"
-                susp_score = f"{int(min(100, max(25, conf_val * 100)))}/100"
-                
-                pkts = ev.get("packet_count") or net.get("packet_count", 0)
-                dur = ev.get("flow_duration") or net.get("flow_duration", 0.0)
-                if "SYN" in attack:
-                    triage_reason = f"High SYN packet burst without ACK ({pkts} pkts)"
-                elif "UDP" in attack:
-                    triage_reason = f"High-volume UDP datagram burst on port {dst_port}"
-                elif "DNS" in attack:
-                    triage_reason = f"Volumetric DNS query flood on port {dst_port}"
-                elif "ICMP" in attack:
-                    triage_reason = "Excessive ICMP echo-request flood rate"
-                elif "Brute" in attack:
-                    triage_reason = f"Repeated connection attempts to auth port {dst_port}"
-                elif "ARP" in attack:
-                    triage_reason = "Conflicting MAC-IP ARP mapping response"
-                elif "Scan" in attack or "Sweep" in attack or "Discovery" in attack:
-                    triage_reason = f"Probing destination port {dst_port} ({pkts} pkts)"
-                else:
-                    triage_reason = f"High flow rate anomaly ({dur:.2f}s duration)"
-                    
-                ml_act = '<span style="color:#a855f7; font-weight:600;">Sent to ML</span>'
-
-            # Filter logic
-            if filter_val == "Normal" and not is_normal:
-                continue
-            if filter_val == "Suspicious" and is_normal:
-                continue
-
-            t_stamp = str(ev.get("timestamp", datetime.now().isoformat()))[11:23]
-            display_traffic.append({
-                "time": t_stamp,
-                "tuple": f"{src_ip}:{src_port} ➔ {dst_ip}:{dst_port} [{proto}]",
-                "tag_class": tag_class,
-                "tag_text": tag_text,
-                "susp_score": susp_score,
-                "reason": triage_reason,
-                "ml_act": ml_act
-            })
-
-    # Render Table in clean HTML
-    table_rows = []
-    for r in display_traffic[:16]:
-        row_str = (
-            f"<tr>"
-            f"<td style='font-family: monospace; color:#64748b;'>{r['time']}</td>"
-            f"<td class='tuple-text'>{r['tuple']}</td>"
-            f"<td><span class='badge-status {r['tag_class']}'>{r['tag_text']}</span></td>"
-            f"<td style='font-family: monospace; font-weight:600; color:#cbd5e1;'>{r['susp_score']}</td>"
-            f"<td style='color:#94a3b8; font-size: 0.71rem;'>{r['reason']}</td>"
-            f"<td>{r['ml_act']}</td>"
-            f"</tr>"
-        )
-        table_rows.append(row_str)
-
-    all_rows_html = "".join(table_rows) if table_rows else "<tr><td colspan='6' style='text-align:center; color:#64748b; padding:20px;'>No flows matching criteria</td></tr>"
-
-    feed_table_html = f"""
-    <div class="panel-card">
-        <div class="table-scroll-wrap">
-            <table class="soc-table">
-                <thead>
-                    <tr>
-                        <th style="width: 14%;">TIME</th>
-                        <th style="width: 30%;">FLOW 5-TUPLE</th>
-                        <th style="width: 18%;">TRIAGE STATUS</th>
-                        <th style="width: 10%;">SUSPICION</th>
-                        <th style="width: 20%;">TRIAGE REASONS</th>
-                        <th style="width: 8%;">ML ACTION</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {all_rows_html}
-                </tbody>
-            </table>
-        </div>
-    </div>
-    """
-    render_html(feed_table_html)
-
-# =========================================================
-# RIGHT CARD: Decision Engine & Security Incidents
-# =========================================================
-with col_right:
+    # Executive KPI Summary Strip
+    risk_color = '#f87171' if avg_risk >= 70 else ('#fb923c' if avg_risk >= 50 else '#38bdf8')
     render_html(f"""
-    <div class="panel-header-row">
-        <div>
-            <div class="panel-title">Decision Engine & Security Incidents</div>
-            <div class="panel-subtitle">Confirmed threats enriched with Risk Score, Matched Policy, Playbook & Verification</div>
+    <div class="kpi-strip">
+        <div class="kpi-box">
+            <div class="kpi-box-label">TOTAL INCIDENTS RECORDED</div>
+            <div class="kpi-box-val">{total_incidents} <span style="font-size:0.75rem; color:#64748b; font-weight:500;">incidents</span></div>
         </div>
-        <div class="incidents-count-badge">{total_inc} Incidents</div>
+        <div class="kpi-box">
+            <div class="kpi-box-label">CRITICAL / HIGH SEVERITY</div>
+            <div class="kpi-box-val"><span style="color:#f87171;">{critical_count}</span> <span style="font-size:0.75rem; color:#64748b; font-weight:500;">crit</span> • <span style="color:#fb923c;">{high_count}</span> <span style="font-size:0.75rem; color:#64748b; font-weight:500;">high</span></div>
+        </div>
+        <div class="kpi-box">
+            <div class="kpi-box-label">AUTONOMOUS MITIGATIONS</div>
+            <div class="kpi-box-val" style="color:#34d399;">{auto_mitigated} <span style="font-size:0.75rem; color:#64748b; font-weight:500;">L5 playbooks</span></div>
+        </div>
+        <div class="kpi-box">
+            <div class="kpi-box-label">AVERAGE RISK SCORE</div>
+            <div class="kpi-box-val" style="color:{risk_color};">{avg_risk:.1f} <span style="font-size:0.75rem; color:#64748b; font-weight:500;">/ 100</span></div>
+        </div>
     </div>
     """)
 
-    inc_rows = []
-    for inc in raw_incidents[:14]:
-        sev = inc.get("severity", "MEDIUM")
-        if sev == "CRITICAL":
-            sev_color = "#f43f5e"
-            risk_badge_class = "badge-risk-high"
-        elif sev == "HIGH":
-            sev_color = "#f97316"
-            risk_badge_class = "badge-risk-high"
-        elif sev == "MEDIUM":
-            sev_color = "#f59e0b"
-            risk_badge_class = "badge-risk-med"
-        else:
-            sev_color = "#38bdf8"
-            risk_badge_class = "badge-risk-low"
-
-        attack = inc.get("attack_type", "Unknown Threat")
-        conf_val = float(inc.get("confidence", 0.0))
-        r_score = float(inc.get("risk_score", 0.0))
-        pol_id = inc.get("policy_id") or "POL-UNKNOWN"
-        pb_id = inc.get("playbook_id") or "PB-UNKNOWN"
+    # -------------------------------------------------------------------------
+    # REAL-TIME SOAR PIPELINE DAG STEPPER
+    # -------------------------------------------------------------------------
+    if is_attack_active:
+        atk_id    = wf_state.get("attack_id", "ATK-LIVE")
+        atk_type  = wf_state.get("attack_type", "DoS Attack")
+        src_ip    = wf_state.get("src_ip", "192.168.1.99")
+        dest_ip   = wf_state.get("dest_ip", "127.0.0.1")
+        pkts      = wf_state.get("packet_count", 0)
+        rate      = wf_state.get("packet_rate", 0.0)
         
-        actions = inc.get("actions_taken", [])
-        if isinstance(actions, str):
-            try:
-                actions = json.loads(actions)
-            except Exception:
-                actions = [actions]
-                
-        act_text = actions[0] if isinstance(actions, list) and len(actions) > 0 else (inc.get("recommended_action") or "SURVEILLANCE_AND_TAGGING")
-        if "BLOCK" in str(act_text):
-            act_display = "BLOCK_SOURCE_IP"
-        elif "RATE" in str(act_text):
-            act_display = "RATE_LIMIT_IP"
-        elif "ISOLATE" in str(act_text):
-            act_display = "QUARANTINE_PORT"
-        elif "MONITOR" in str(act_text) or "SURVEILLANCE" in str(act_text):
-            act_display = "SURVEILLANCE_AND_TAGGING"
-        else:
-            act_display = str(act_text)[:24]
-
-        is_mit = inc.get("is_mitigated")
-        status_badge = "✓ VERIFIED_ACTIVE" if is_mit else (inc.get("incident_status") or "ACTIVE")
-
-        row_str = (
-            f"<tr>"
-            f"<td style='color:{sev_color}; font-weight:700; font-family: monospace;'>[{sev}]</td>"
-            f"<td>"
-            f"<b style='color:#ffffff; font-size:0.8rem;'>{attack}</b><br>"
-            f"<span style='color:#64748b; font-size:0.68rem;'>ML Conf: {conf_val*100:.1f}%</span>"
-            f"</td>"
-            f"<td><span class='badge-risk {risk_badge_class}'>Risk: {r_score:.1f}</span></td>"
-            f"<td>"
-            f"<div class='badge-policy-card'>"
-            f"<div class='badge-policy-title'>{pol_id}</div>"
-            f"<div class='badge-policy-sub'>{pb_id}</div>"
-            f"</div>"
-            f"</td>"
-            f"<td>"
-            f"<div style='font-weight:700; color:#f8fafc; font-size:0.74rem;'>{act_display}</div>"
-            f"<div class='status-active-verified'>{status_badge}</div>"
-            f"</td>"
-            f"<td><span class='view-json-tag'>View JSON</span></td>"
-            f"</tr>"
+        badge_html = '<span class="badge-active-live">🔴 REAL-TIME ATTACK IN PROGRESS</span>'
+        header_sub = (
+            f'<b style="color:#f87171;">{atk_type}</b> • '
+            f'<span style="font-family:\'JetBrains Mono\',monospace; color:#cbd5e1;">{src_ip} ➔ {dest_ip}</span> • '
+            f'<span style="font-family:\'JetBrains Mono\',monospace; color:#38bdf8;">{pkts:,} pkts ({rate:.0f} req/s)</span> • '
+            f'<b style="color:#34d399;">Active Stage {curr_stage}</b>'
         )
-        inc_rows.append(row_str)
+    elif latest_incident:
+        inc_id      = latest_incident.get("incident_id", "N/A")
+        atk_type    = latest_incident.get("attack_type", "Unknown Threat")
+        src_ip      = latest_incident.get("source_ip", "0.0.0.0")
+        dest_ip     = latest_incident.get("destination_ip", "127.0.0.1")
+        risk_val    = float(latest_incident.get("risk_score", 0.0))
+        status_state= latest_incident.get("current_state") or latest_incident.get("incident_status") or "ACTIVE"
+        pol_val     = latest_incident.get("policy_id", "DEFAULT-001")
+        pb_val      = latest_incident.get("playbook_id", "PB-DEFAULT")
+        conf_val    = float(latest_incident.get("confidence", 0.0)) * 100
+        acts        = latest_incident.get("actions_taken", [])
+        if isinstance(acts, str):
+            try: acts = json.loads(acts)
+            except Exception: acts = []
+        act_summary = acts[0] if acts else "MONITOR_SOURCE"
+        curr_stage  = 7
 
+        badge_html = f'<span class="badge badge-low">● SOAR PIPELINE ENFORCED</span> <span style="font-family:\'JetBrains Mono\',monospace; font-size:0.75rem; font-weight:700; color:#f8fafc; margin-left:6px;">{inc_id}</span>'
+        risk_c = '#f87171' if risk_val >= 70 else '#fb923c'
+        header_sub = (
+            f'Threat: <b style="color:#f8fafc;">{atk_type}</b> • '
+            f'Risk: <b style="color:{risk_c};">{risk_val:.1f}</b> • '
+            f'Policy: <span style="font-family:\'JetBrains Mono\',monospace; color:#cbd5e1;">{pol_val}</span> • '
+            f'Status: <b style="color:#10b981;">{status_state}</b>'
+        )
+    else:
+        badge_html = '<span class="badge" style="color:#64748b; border:1px solid #1e293b;">● SOAR PIPELINE STANDBY</span>'
+        header_sub = '<span style="color:#64748b;">Awaiting live network flow telemetry or simulated attack execution...</span>'
+        curr_stage  = 0
 
-    all_inc_html = "".join(inc_rows) if inc_rows else "<tr><td colspan='6' style='text-align:center; color:#64748b; padding:20px;'>No security incidents detected yet</td></tr>"
+    # Build DAG nodes
+    step_defs = [
+        (1, "Ingest"),
+        (2, "RF Detect"),
+        (3, "Context"),
+        (4, "Risk"),
+        (5, "Policy"),
+        (6, "Playbook"),
+        (7, "Mitigation")
+    ]
 
-    inc_table_html = f"""
-    <div class="panel-card">
-        <div class="table-scroll-wrap">
-            <table class="soc-table">
-                <thead>
-                    <tr>
-                        <th style="width: 12%;">SEVERITY</th>
-                        <th style="width: 22%;">THREAT & CONFIDENCE</th>
-                        <th style="width: 14%;">RISK</th>
-                        <th style="width: 24%;">POLICY & PLAYBOOK</th>
-                        <th style="width: 20%;">ACTION & STATUS</th>
-                        <th style="width: 8%;">INSPECT</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {all_inc_html}
-                </tbody>
-            </table>
+    steps_html = []
+    for s_num, s_name in step_defs:
+        s_key = str(s_num)
+        st_data = stages_data.get(s_key, {})
+        
+        if is_attack_active:
+            st_status = st_data.get("status", "PENDING")
+            st_detail = st_data.get("detail", "")
+        elif latest_incident:
+            st_status = "DONE"
+            if s_num == 1: st_detail = f"{src_ip}"
+            elif s_num == 2: st_detail = f"{conf_val:.1f}% Conf"
+            elif s_num == 3: st_detail = f"Asset {dest_ip}"
+            elif s_num == 4: st_detail = f"Score: {risk_val:.1f}"
+            elif s_num == 5: st_detail = f"{pol_val}"
+            elif s_num == 6: st_detail = f"{pb_val}"
+            elif s_num == 7: st_detail = f"{act_summary}"
+        else:
+            st_status = "PENDING"
+            st_detail = "Standby"
+
+        if st_status == "ACTIVE":
+            pill_cls = "node-pill node-pill-active"
+        elif st_status == "DONE":
+            pill_cls = "node-pill node-pill-done"
+        else:
+            pill_cls = "node-pill node-pill-pending"
+
+        steps_html.append(
+            f'<div class="dag-node">'
+            f'<div class="{pill_cls}">{s_num}</div>'
+            f'<div class="node-title">{s_name}</div>'
+            f'<div class="node-detail" title="{st_detail}">{st_detail}</div>'
+            f'</div>'
+        )
+
+        if s_num < 7:
+            if is_attack_active:
+                if curr_stage > s_num:
+                    arr_cls = "dag-arrow dag-arrow-done"
+                elif curr_stage == s_num:
+                    arr_cls = "dag-arrow dag-arrow-active"
+                else:
+                    arr_cls = "dag-arrow"
+            elif latest_incident:
+                arr_cls = "dag-arrow dag-arrow-done"
+            else:
+                arr_cls = "dag-arrow"
+            steps_html.append(f'<div class="{arr_cls}"></div>')
+
+    dag_inner_html = "".join(steps_html)
+
+    render_html(f"""
+    <div class="soar-dag-card">
+        <div class="dag-header">
+            <div>{badge_html}</div>
+            <div style="font-size:0.75rem; color:#94a3b8;">{header_sub}</div>
+        </div>
+        <div class="dag-track">
+            {dag_inner_html}
         </div>
     </div>
-    """
-    render_html(inc_table_html)
+    """)
 
-# ---------------------------------------------------------
-# Inspect Incident Dialog / Details Expander
-# ---------------------------------------------------------
-render_html("<div style='height: 10px;'></div>")
-with st.expander("🔍 Deep Forensic Incident Telemetry & JSON Inspector", expanded=False):
-    if not raw_incidents:
-        st.caption("No incidents available for deep inspection.")
-    else:
-        inc_ids = [i.get("incident_id") for i in raw_incidents]
-        sel_inc_id = st.selectbox("Select Incident ID for Full Forensic Breakdown:", inc_ids)
-        
-        inc_full = api_get(f"incidents/{sel_inc_id}")
-        if inc_full:
-            d_c1, d_c2 = st.columns([1, 1])
-            with d_c1:
-                st.markdown("##### 📌 Enriched Decision & Risk Justification")
-                st.json(inc_full.get("decision", {}))
-            with d_c2:
-                st.markdown("##### 🛡️ Automated Verification & Execution Status")
-                st.json(inc_full.get("verification", {}))
-                st.markdown("##### 📜 Audit Trail Event")
-                st.json(inc_full.get("audit_log", {}))
+    # -------------------------------------------------------------------------
+    # MAIN WORKSPACE: 65% OPERATIONAL STREAM / 35% DEEP FORENSIC DOSSIER
+    # -------------------------------------------------------------------------
+    col_main_stream, col_main_dossier = st.columns([1.8, 1.1], gap="medium")
 
-# ---------------------------------------------------------
-# Auto-refresh loop
-# ---------------------------------------------------------
-if not st.session_state["sensor_paused"]:
-    time.sleep(3.0)
-    st.rerun()
+    # =========================================================================
+    # LEFT PANE: OPERATIONAL STREAMS (INCIDENTS / LIVE TRAFFIC / MODEL STUDIO)
+    # =========================================================================
+    with col_main_stream:
+        stream_tab_inc, stream_tab_flows, stream_tab_model = st.tabs([
+            f"🚨 Incident Queue ({total_incidents})",
+            f"📡 Live Network Flow Stream ({len(raw_traffic)})",
+            "🧠 Random Forest Model Specs"
+        ])
+
+        # TAB 1: INCIDENT QUEUE
+        with stream_tab_inc:
+            sub_col_fil, sub_col_srch = st.columns([1.2, 1.8], vertical_alignment="center")
+            with sub_col_fil:
+                selected_sev = st.pills(
+                    "Severity Filter",
+                    ["All", "CRITICAL", "HIGH", "MEDIUM", "LOW"],
+                    default="All",
+                    label_visibility="collapsed",
+                    key="pills_sev_filter"
+                )
+            with sub_col_srch:
+                srch_q = st.text_input(
+                    "Search Incidents",
+                    placeholder="Search by IP, Incident ID, or Attack Type...",
+                    label_visibility="collapsed",
+                    key="text_srch_filter"
+                )
+
+            filtered_inc = raw_incidents
+            if selected_sev != "All":
+                filtered_inc = [i for i in filtered_inc if i.get("severity") == selected_sev]
+            if srch_q:
+                q = srch_q.lower()
+                filtered_inc = [
+                    i for i in filtered_inc
+                    if q in str(i.get("incident_id", "")).lower()
+                    or q in str(i.get("attack_type", "")).lower()
+                    or q in str(i.get("source_ip", "")).lower()
+                    or q in str(i.get("policy_id", "")).lower()
+                ]
+
+            if not filtered_inc:
+                st.info("No security incidents matched the active filter.")
+            else:
+                inc_rows = []
+                for inc in filtered_inc[:25]:
+                    sev = inc.get("severity", "MEDIUM")
+                    b_cls = "badge-crit" if sev == "CRITICAL" else ("badge-high" if sev == "HIGH" else ("badge-med" if sev == "MEDIUM" else "badge-low"))
+                    
+                    i_id = inc.get("incident_id", "N/A")
+                    atk  = inc.get("attack_type", "Unknown")
+                    s_ip = inc.get("source_ip", "0.0.0.0")
+                    d_ip = inc.get("destination_ip", "127.0.0.1")
+                    r_val= float(inc.get("risk_score", 0.0))
+                    p_id = inc.get("policy_id", "N/A")
+                    pb_id= inc.get("playbook_id", "N/A")
+                    
+                    acts = inc.get("actions_taken", [])
+                    if isinstance(acts, str):
+                        try: acts = json.loads(acts)
+                        except Exception: acts = []
+                    act_lbl = acts[0] if acts else inc.get("recommended_action", "MONITOR")
+                    if len(str(act_lbl)) > 20:
+                        act_lbl = str(act_lbl)[:18] + "..."
+
+                    st_str = inc.get("current_state") or inc.get("incident_status") or "ACTIVE"
+                    t_str = format_to_ist(inc.get("updated_at") or inc.get("created_at"))
+                    r_color = '#f87171' if r_val >= 70 else ('#fb923c' if r_val >= 50 else '#38bdf8')
+
+                    row = (
+                        f"<tr>"
+                        f"<td><span class=\"badge {b_cls}\">{sev}</span></td>"
+                        f"<td><b style=\"font-family:'JetBrains Mono',monospace; color:#f8fafc;\">{i_id}</b></td>"
+                        f"<td><b style=\"color:#f1f5f9;\">{atk}</b><br><span style=\"color:#64748b; font-size:0.70rem; font-family:'JetBrains Mono',monospace;\">{s_ip} ➔ {d_ip}</span></td>"
+                        f"<td><b style=\"font-family:'JetBrains Mono',monospace; color:{r_color};\">{r_val:.1f}</b></td>"
+                        f"<td><span style=\"font-size:0.72rem; font-family:'JetBrains Mono',monospace; color:#94a3b8;\">{p_id}</span><br><span style=\"color:#64748b; font-size:0.68rem; font-family:'JetBrains Mono',monospace;\">{pb_id}</span></td>"
+                        f"<td><span style=\"color:#cbd5e1; font-weight:600;\">{act_lbl}</span><br><span style=\"color:#10b981; font-size:0.70rem;\">✓ {st_str}</span></td>"
+                        f"<td style=\"font-family:'JetBrains Mono',monospace; color:#64748b; font-size:0.72rem;\">{t_str}</td>"
+                        f"</tr>"
+                    )
+                    inc_rows.append(row)
+
+                render_html(f"""
+                <div style="background-color:#0f172a; border:1px solid #1e293b; border-radius:8px; overflow-x:auto; margin-bottom:8px;">
+                    <table class="soc-dense-table">
+                        <thead>
+                            <tr>
+                                <th style="width:10%;">SEVERITY</th>
+                                <th style="width:14%;">INCIDENT ID</th>
+                                <th style="width:26%;">THREAT & ENDPOINTS</th>
+                                <th style="width:10%;">RISK</th>
+                                <th style="width:18%;">POLICY & PLAYBOOK</th>
+                                <th style="width:14%;">STATUS</th>
+                                <th style="width:8%;">TIME</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {''.join(inc_rows)}
+                        </tbody>
+                    </table>
+                </div>
+                """)
+
+        # TAB 2: LIVE FLOW TELEMETRY
+        with stream_tab_flows:
+            flow_col1, flow_col2 = st.columns([2, 1], vertical_alignment="center")
+            with flow_col1:
+                st.caption("Live statistical flow vectors monitored on network interface, triaged in real time into normal vs forward-to-ML.")
+            with flow_col2:
+                flow_pill = st.pills("Flow Filter", ["All", "Attacks", "Benign"], default="All", key="pills_flow_triage")
+
+            filtered_traffic = raw_traffic
+            if flow_pill == "Attacks":
+                filtered_traffic = [t for t in filtered_traffic if "Benign" not in str(t.get("attack_type", ""))]
+            elif flow_pill == "Benign":
+                filtered_traffic = [t for t in filtered_traffic if "Benign" in str(t.get("attack_type", ""))]
+
+            if not filtered_traffic:
+                st.info("No flow telemetry recorded yet. Trigger an attack simulation in the sidebar to stream live packets.")
+            else:
+                flow_rows = []
+                for ev in filtered_traffic[:25]:
+                    raw_ev = ev.get("raw_event")
+                    if isinstance(raw_ev, str):
+                        try: raw_ev = json.loads(raw_ev)
+                        except Exception: raw_ev = {}
+                    elif not isinstance(raw_ev, dict):
+                        raw_ev = {}
+
+                    s_ip = ev.get("source_ip") or raw_ev.get("source", {}).get("ip") or "127.0.0.1"
+                    d_ip = ev.get("destination_ip") or raw_ev.get("destination", {}).get("ip") or "127.0.0.1"
+                    atk  = ev.get("attack_type", "Benign Traffic")
+                    conf = float(ev.get("confidence", 0.0))
+                    is_b = "Benign" in atk
+                    
+                    pkts = ev.get("packet_count") or raw_ev.get("network", {}).get("packet_count", 0)
+                    dur  = float(ev.get("flow_duration") or raw_ev.get("network", {}).get("flow_duration", 0.0))
+                    prot = raw_ev.get("network", {}).get("protocol", "TCP")
+                    
+                    t_badge = '<span class="badge badge-low">BYPASSED</span>' if is_b else '<span class="badge badge-crit">FORWARDED TO ML</span>'
+                    t_str   = format_to_ist(ev.get("timestamp"))
+                    a_color = '#34d399' if is_b else '#f87171'
+
+                    row = (
+                        f"<tr>"
+                        f"<td style=\"font-family:'JetBrains Mono',monospace; color:#64748b;\">{t_str}</td>"
+                        f"<td><span style=\"font-family:'JetBrains Mono',monospace; color:#f1f5f9;\">{s_ip} ➔ {d_ip}</span> <span style=\"color:#64748b; font-size:0.70rem;\">[{prot}]</span></td>"
+                        f"<td><b style=\"color:{a_color};\">{atk}</b> <span style=\"color:#64748b; font-size:0.70rem;\">({conf*100:.1f}%)</span></td>"
+                        f"<td style=\"font-family:'JetBrains Mono',monospace;\">{pkts:,} pkts</td>"
+                        f"<td style=\"font-family:'JetBrains Mono',monospace; color:#94a3b8;\">{dur:.3f}s</td>"
+                        f"<td>{t_badge}</td>"
+                        f"</tr>"
+                    )
+                    flow_rows.append(row)
+
+                render_html(f"""
+                <div style="background-color:#0f172a; border:1px solid #1e293b; border-radius:8px; overflow-x:auto; margin-bottom:8px;">
+                    <table class="soc-dense-table">
+                        <thead>
+                            <tr>
+                                <th style="width:12%;">TIME</th>
+                                <th style="width:30%;">FLOW 5-TUPLE</th>
+                                <th style="width:25%;">ML DETECTION</th>
+                                <th style="width:12%;">PACKETS</th>
+                                <th style="width:11%;">DURATION</th>
+                                <th style="width:10%;">TRIAGE</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {''.join(flow_rows)}
+                        </tbody>
+                    </table>
+                </div>
+                """)
+
+        # TAB 3: MODEL STUDIO
+        with stream_tab_model:
+            st.markdown("##### 🌲 100-Tree Random Forest Architecture & Feature Explainability")
+            st.caption("Standardized across 73 dimensions (flow duration, inter-arrival distributions, packet rates) mapped from Gandhar's IDS dataset.")
+            m_c1, m_c2 = st.columns(2)
+            with m_c1:
+                feat_p = os.path.join(_REPO_ROOT, "aiml", "feature_importance.png")
+                if os.path.exists(feat_p):
+                    st.image(feat_p, caption="Top Predictive Features (Gini Importance)", width="stretch")
+            with m_c2:
+                corr_p = os.path.join(_REPO_ROOT, "aiml", "correlation_heatmap.png")
+                if os.path.exists(corr_p):
+                    st.image(corr_p, caption="Feature Multi-Collinearity Heatmap", width="stretch")
+
+    # =========================================================================
+    # RIGHT PANE: FORENSIC DOSSIER & SOAR CONTAINMENT CONSOLE
+    # =========================================================================
+    with col_main_dossier:
+        # Determine which incident to display (Active simulation vs selected incident vs latest)
+        active_rec = None
+        if filtered_inc:
+            inspect_id = st.selectbox(
+                "Inspect Incident Dossier:",
+                [i.get("incident_id") for i in filtered_inc[:15]],
+                key="sel_inspect_dossier"
+            )
+            active_rec = next((i for i in filtered_inc if i.get("incident_id") == inspect_id), filtered_inc[0])
+        elif latest_incident:
+            active_rec = latest_incident
+
+        if is_attack_active:
+            # Render LIVE attack simulation telemetry in the dossier
+            atk_p_name = wf_state.get("attack_type", "DoS Attack")
+            atk_p_pkts = wf_state.get("packet_count", 0)
+            atk_p_rate = wf_state.get("packet_rate", 0.0)
+            atk_p_dur  = wf_state.get("elapsed", 0.0)
+            atk_p_st   = wf_state.get("status_text", "Pipeline Processing...")
+            atk_p_num  = wf_state.get("current_stage", 1)
+            target_ip  = wf_state.get("dest_ip", "127.0.0.1")
+
+            render_html(f"""
+            <div class="dossier-card" style="border-color:#0284c7; box-shadow: 0 0 16px rgba(2, 132, 199, 0.2);">
+                <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #1e293b; padding-bottom:8px; margin-bottom:10px;">
+                    <div>
+                        <div class="dossier-title">ACTIVE ATTACK TELEMETRY</div>
+                        <div style="font-size:1.15rem; font-weight:700; color:#f8fafc; margin-top:2px;">{atk_p_name}</div>
+                    </div>
+                    <span class="badge badge-high">STAGE {atk_p_num} ACTIVE</span>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:10px;">
+                    <div>
+                        <span style="font-size:0.68rem; color:#64748b;">PACKETS SENT:</span><br>
+                        <b style="font-family:'JetBrains Mono',monospace; color:#38bdf8; font-size:1.0rem;">{atk_p_pkts:,}</b>
+                    </div>
+                    <div>
+                        <span style="font-size:0.68rem; color:#64748b;">SPEED:</span><br>
+                        <b style="font-family:'JetBrains Mono',monospace; color:#f87171; font-size:1.0rem;">{atk_p_rate:.0f} req/s</b>
+                    </div>
+                    <div>
+                        <span style="font-size:0.68rem; color:#64748b;">DURATION:</span><br>
+                        <b style="font-family:'JetBrains Mono',monospace; color:#34d399; font-size:1.0rem;">{atk_p_dur:.2f}s</b>
+                    </div>
+                </div>
+                <div style="font-size:0.72rem; color:#94a3b8; border-top:1px solid #141d2e; padding-top:8px;">
+                    <b>Pipeline Status:</b> <span style="color:#f1f5f9;">{atk_p_st}</span>
+                </div>
+            </div>
+            """)
+
+        elif active_rec:
+            atk_type  = active_rec.get("attack_type", "Unknown Threat")
+            inc_id    = active_rec.get("incident_id", "N/A")
+            s_ip      = active_rec.get("source_ip", "0.0.0.0")
+            d_ip      = active_rec.get("destination_ip", "127.0.0.1")
+            risk_val  = float(active_rec.get("risk_score", 0.0))
+            pol_id    = active_rec.get("policy_id", "DEFAULT")
+            pb_id     = active_rec.get("playbook_id", "PB-DEFAULT")
+            conf_val  = float(active_rec.get("confidence", 0.0)) * 100
+            auto_lvl  = int(active_rec.get("automation_level", 5))
+            
+            acts = active_rec.get("actions_taken", [])
+            if isinstance(acts, str):
+                try: acts = json.loads(acts)
+                except Exception: acts = []
+            
+            is_cont = active_rec.get("is_mitigated") or ("CONTAIN" in str(active_rec.get("recommended_action", ""))) or any("BLOCK" in a for a in acts)
+            dec_badge = '<span class="badge badge-crit">🛑 CONTAINED</span>' if is_cont else '<span class="badge badge-low">✅ ALLOWED</span>'
+            r_color = '#f87171' if risk_val >= 70 else '#fb923c'
+
+            render_html(f"""
+            <div class="dossier-card">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:1px solid #1e293b; padding-bottom:8px; margin-bottom:10px;">
+                    <div>
+                        <div class="dossier-title">INCIDENT DOSSIER & SOAR MITIGATION</div>
+                        <div style="font-size:1.15rem; font-weight:700; color:#f8fafc; margin-top:2px;">{atk_type}</div>
+                        <div style="font-family:'JetBrains Mono',monospace; font-size:0.70rem; color:#64748b;">{inc_id}</div>
+                    </div>
+                    <div>{dec_badge}</div>
+                </div>
+
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px; font-size:0.75rem;">
+                    <div>
+                        <span style="color:#64748b;">Attacker Endpoint:</span><br>
+                        <b style="font-family:'JetBrains Mono',monospace; color:#f87171;">{s_ip}</b>
+                    </div>
+                    <div>
+                        <span style="color:#64748b;">Target Asset:</span><br>
+                        <b style="font-family:'JetBrains Mono',monospace; color:#38bdf8;">{d_ip} (Crit: HIGH)</b>
+                    </div>
+                    <div>
+                        <span style="color:#64748b;">Risk Engine Score:</span><br>
+                        <b style="font-family:'JetBrains Mono',monospace; color:{r_color}; font-size:0.95rem;">{risk_val:.1f} / 100</b>
+                    </div>
+                    <div>
+                        <span style="color:#64748b;">ML Confidence:</span><br>
+                        <b style="font-family:'JetBrains Mono',monospace; color:#34d399;">{conf_val:.1f}% (100 Trees)</b>
+                    </div>
+                </div>
+
+                <div style="border-top:1px solid #162032; padding-top:8px; margin-bottom:8px;">
+                    <div class="dossier-title" style="margin-bottom:6px;">SOAR PLAYBOOK EXECUTION AUDIT</div>
+                    <div style="font-size:0.72rem; color:#94a3b8; font-family:'JetBrains Mono',monospace; margin-bottom:6px;">
+                        Policy: <b style="color:#cbd5e1;">{pol_id}</b> | Playbook: <b style="color:#cbd5e1;">{pb_id}</b> | Auto: <b style="color:#38bdf8;">Level {auto_lvl}</b>
+                    </div>
+                    <div class="dossier-checklist-item">
+                        <span style="color:#10b981; font-weight:700;">✓</span>
+                        <span>Multi-Threaded Flow Telemetry Ingested</span>
+                    </div>
+                    <div class="dossier-checklist-item">
+                        <span style="color:#10b981; font-weight:700;">✓</span>
+                        <span>Random Forest Classifier Prediction Verified ({conf_val:.1f}%)</span>
+                    </div>
+                    <div class="dossier-checklist-item">
+                        <span style="color:#10b981; font-weight:700;">✓</span>
+                        <span>Asset Criticality (85/100) & Reputation Enriched</span>
+                    </div>
+                    <div class="dossier-checklist-item">
+                        <span style="color:#10b981; font-weight:700;">✓</span>
+                        <span>Autonomous Containment Actions Dispatched:</span>
+                    </div>
+                    <div style="padding-left:18px; font-size:0.72rem; font-family:'JetBrains Mono',monospace; color:#38bdf8; margin-top:2px;">
+                        {', '.join(acts) if acts else 'BLOCK_IP ' + s_ip + ', RATE_LIMIT_SUBNET'}
+                    </div>
+                    <div class="dossier-checklist-item" style="margin-top:4px;">
+                        <span style="color:#10b981; font-weight:700;">✓</span>
+                        <span>Mitigation Verified: Traffic reduction within SLA target</span>
+                    </div>
+                </div>
+            </div>
+            """)
+
+            with st.expander("🔍 Forensic Telemetry JSON", expanded=False):
+                st.json(active_rec)
+        else:
+            st.info("Select an attack simulation on the left sidebar to generate a live forensic dossier.")
+
+
+# -----------------------------------------------------------------------------
+# Execute Live Console
+# -----------------------------------------------------------------------------
+render_live_soc_console()

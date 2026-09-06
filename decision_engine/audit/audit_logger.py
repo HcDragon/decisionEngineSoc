@@ -3,6 +3,7 @@ from typing import Optional, Dict, Any
 from datetime import datetime, timezone
 from decision_engine.storage.db import Database
 from decision_engine.events.event_bus import EventBus
+from decision_engine.config.constants import now_ist_iso
 
 # Configure standard logger
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] [%(name)s] %(message)s")
@@ -28,7 +29,7 @@ class AuditLogger:
         status: str = "SUCCESS",
         metadata: Optional[Dict[str, Any]] = None
     ):
-        timestamp = datetime.now(timezone.utc).isoformat()
+        timestamp = now_ist_iso()
         
         # Structured log record
         entry = {

@@ -48,14 +48,16 @@ fi
 
 # Auto-detect IDS Project directory
 if [ -z "$IDS_PROJECT_DIR" ]; then
-    if [ -d "../AimlProject/ids_project" ]; then
+    if [ -d "aiml" ]; then
+        export IDS_PROJECT_DIR="$(pwd)/aiml"
+    elif [ -d "ids_project" ]; then
+        export IDS_PROJECT_DIR="$(pwd)/ids_project"
+    elif [ -d "../AimlProject/ids_project" ]; then
         export IDS_PROJECT_DIR="$(cd ../AimlProject/ids_project && pwd)"
-    elif [ -d "../ids_project" ]; then
-        export IDS_PROJECT_DIR="$(cd ../ids_project && pwd)"
+    elif [ -d "$HOME/Downloads/AimlProject/ids_project" ]; then
+        export IDS_PROJECT_DIR="$HOME/Downloads/AimlProject/ids_project"
     elif [ -d "$HOME/AimlProject/ids_project" ]; then
         export IDS_PROJECT_DIR="$HOME/AimlProject/ids_project"
-    elif [ -d "$HOME/ids_project" ]; then
-        export IDS_PROJECT_DIR="$HOME/ids_project"
     fi
 fi
 

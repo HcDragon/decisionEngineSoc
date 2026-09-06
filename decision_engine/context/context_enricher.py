@@ -4,6 +4,8 @@ from decision_engine.models.context import EnrichedContext, ObservedData, Derive
 from decision_engine.storage.db import Database
 from decision_engine.audit.audit_logger import AuditLogger
 
+from decision_engine.context.registries import ASSET_REGISTRY, THREAT_INTEL_REGISTRY
+
 class ContextEnricher:
     """
     Context Enrichment Layer.
@@ -14,19 +16,9 @@ class ContextEnricher:
         self.db = db or Database()
         self.audit = audit_logger or AuditLogger()
         
-        # Configured Registries (Authoritative CMDB & TIP mock integrations)
-        # Note: In production these query enterprise CMDB/TIP APIs
-        self.asset_registry = {
-            "10.0.0.5": {"criticality": 95, "role": "Core Production Database"},
-            "10.0.0.10": {"criticality": 80, "role": "Public Web Load Balancer"},
-            "10.0.0.20": {"criticality": 60, "role": "Internal Application Server"},
-            "10.0.0.50": {"criticality": 25, "role": "Employee Workstation"},
-        }
-        self.threat_intel_registry = {
-            "203.0.113.50": {"score": 95, "category": "Known Malicious (Botnet C2)"},
-            "198.51.100.22": {"score": 90, "category": "Known Malicious (Scanner)"},
-            "192.168.1.200": {"score": 50, "category": "Suspicious (High connection rate)"},
-        }
+        # Configured Registries (Authoritative CMDB & TIP integrations)
+        self.asset_registry = dict(ASSET_REGISTRY)
+        self.threat_intel_registry = dict(THREAT_INTEL_REGISTRY)
 
     def enrich(self, event: ThreatEvent) -> EnrichedContext:
         # 1. Extract Observed Data
@@ -49,14 +41,14 @@ class ContextEnricher:
         repeated_count = (existing_inc["event_count"] + 1) if existing_inc else 1
         
         # Check historical incidents involving this source IP
-        historical_incidents = len(self.db.list_incidents()) # Can be filtered by source_ip in DB
+        historical_incidents = self.db.count_incidents_by_source_ip(event.source.ip)
         
         persistence = min(100.0, repeated_count * 20.0)
-        is_recurring = repeated_count > 1
+        is_recurring = repeated_count > 1 or historical_incidents > 0
 
         derived = DerivedData(
             repeated_detections_count=repeated_count,
-            previous_incidents_count=1 if existing_inc else 0,
+            previous_incidents_count=historical_incidents,
             concurrent_target_attacks=0,
             persistence_score=persistence,
             is_recurring_source=is_recurring
