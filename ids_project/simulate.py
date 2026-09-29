@@ -1,16 +1,18 @@
 import glob
+from pathlib import Path
 import time
 import joblib
 import pandas as pd
 
-DATASET_DIR    = "dataset/"
+PROJECT_DIR    = Path(__file__).resolve().parent
+DATASET_DIR    = PROJECT_DIR / "dataset"
 ROWS_PER_FILE  = 20
 DELAY_SECONDS  = 0.5
 EXCLUDE_LABELS = ['Recon Host Discovery']
 
 def load_simulation_data(dataset_dir):
     """Sample ROWS_PER_FILE rows from each CSV and shuffle."""
-    files = glob.glob(f"{dataset_dir}/*.csv")
+    files = list(Path(dataset_dir).glob("*.csv"))
     if not files:
         raise FileNotFoundError(f"No CSV files found in '{dataset_dir}'")
 
@@ -24,12 +26,13 @@ def load_simulation_data(dataset_dir):
     return pd.concat(samples, ignore_index=True).sample(frac=1).reset_index(drop=True)
 
 def main():
-    model         = joblib.load('model.pkl')
-    encoder       = joblib.load('label_encoder.pkl')
-    scaler        = joblib.load('scaler.pkl')
-    feature_names = joblib.load('feature_names.pkl')
+    model         = joblib.load(PROJECT_DIR / 'model.pkl')
+    encoder       = joblib.load(PROJECT_DIR / 'label_encoder.pkl')
+    scaler        = joblib.load(PROJECT_DIR / 'scaler.pkl')
+    feature_names = joblib.load(PROJECT_DIR / 'feature_names.pkl')
 
     df            = load_simulation_data(DATASET_DIR)
+
     actual_labels = df['Attack Name'].tolist()
 
     df = df[feature_names]

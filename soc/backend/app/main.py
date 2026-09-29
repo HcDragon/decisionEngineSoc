@@ -12,6 +12,8 @@ from pydantic import BaseModel, Field
 
 from soc.backend.app.config import settings
 from soc.backend.app.db.session import check_db_health, init_db
+from soc.backend.app.monitor.streamer import traffic_monitor
+from soc.backend.app.api.traffic import router as traffic_router
 
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
@@ -37,9 +39,20 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Error during DB initialization: {e}")
 
+    # Start network traffic flow monitor on the configured API port
+    try:
+        traffic_monitor.start(port=settings.API_PORT)
+        logger.info(f"NFStream traffic monitor active on port {settings.API_PORT}")
+    except Exception as e:
+        logger.error(f"Error starting traffic monitor: {e}")
+
     yield
 
     logger.info("Shutting down AI-Based Smart SOC Manager...")
+    try:
+        traffic_monitor.stop()
+    except Exception as e:
+        logger.error(f"Error stopping traffic monitor: {e}")
 
 
 def create_app() -> FastAPI:
@@ -59,6 +72,10 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Routers
+    app.include_router(traffic_router)
+
 
     class HealthResponse(BaseModel):
         status: Literal["healthy", "degraded"]
@@ -122,6 +139,24 @@ def create_app() -> FastAPI:
             message=f"Automation mode updated to {settings.AUTOMATION_MODE}",
             updated_at=datetime.now(timezone.utc),
         )
+
+    @app.post("/system/shutdown", tags=["System"])
+    async def shutdown_system():
+        """Cleanly terminate the SOC server and background workers."""
+        import os
+        import signal
+        import threading
+        import time
+
+        logger.info("Shutdown requested via /system/shutdown endpoint.")
+
+        def _do_exit():
+            time.sleep(0.3)
+            os.kill(os.getpid(), signal.SIGTERM)
+
+        threading.Thread(target=_do_exit, daemon=True).start()
+        return {"status": "shutting_down", "message": "SOC Backend is shutting down cleanly..."}
+
 
     return app
 
