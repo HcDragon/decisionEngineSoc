@@ -1,0 +1,5 @@
+ip,threat_score,source,description
+10.66.0.5,1.0,LocalThreatIntel,Known malicious C2 scanner
+10.66.0.6,0.9,LocalThreatIntel,Known botnet member
+198.51.100.23,0.85,ExternalFeed,Known brute force scanner
+203.0.113.88,0.95,ExternalFeed,Known DDoS reflector

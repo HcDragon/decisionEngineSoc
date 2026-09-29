@@ -1,0 +1,32 @@
+id: pb_bruteforce_lockout
+name: "Lockout Brute Force Source"
+description: "Temporary block with 15-minute TTL, alert notification, and audit tagging"
+mode_defaults:
+  dry_run: true
+steps:
+  - id: s1
+    action: block_ip
+    params:
+      target: "{{ incident.src_ip }}"
+      ttl_s: 900
+      direction: inbound
+    guards:
+      - not_allowlisted
+    rollback:
+      action: unblock_ip
+      params:
+        target: "{{ incident.src_ip }}"
+    on_failure: continue
+  - id: s2
+    action: tag_asset
+    params:
+      target: "{{ incident.src_ip }}"
+      tag: "brute_force_offender"
+    on_failure: continue
+  - id: s3
+    action: notify
+    params:
+      channel: dashboard
+      severity: "{{ decision.tier }}"
+      message: "Brute force lockout active for {{ incident.src_ip }} (TTL: 15m)"
+    on_failure: continue

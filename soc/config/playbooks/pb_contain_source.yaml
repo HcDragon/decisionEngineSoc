@@ -1,0 +1,44 @@
+id: pb_contain_source
+name: "Contain attacking source"
+description: "Block the source IP, rate-limit, notify, and open a case"
+mode_defaults:
+  dry_run: true
+steps:
+  - id: s1
+    action: block_ip
+    params:
+      target: "{{ incident.src_ip }}"
+      ttl_s: 900
+      direction: inbound
+    guards:
+      - not_allowlisted
+      - not_gateway
+      - target_is_external_or_attacker_pool
+    rollback:
+      action: unblock_ip
+      params:
+        target: "{{ incident.src_ip }}"
+    on_failure: continue
+  - id: s2
+    action: rate_limit
+    params:
+      target: "{{ incident.src_ip }}"
+      pps: 50
+      ttl_s: 900
+    on_failure: continue
+  - id: s3
+    action: notify
+    params:
+      channel: dashboard
+      severity: "{{ decision.tier }}"
+      message: "Contained {{ incident.src_ip }} ({{ incident.family }})"
+    on_failure: continue
+  - id: s4
+    action: open_case
+    params:
+      title: "{{ incident.family }} from {{ incident.src_ip }}"
+      priority: "{{ decision.tier }}"
+      attach:
+        - explanation
+        - score_breakdown
+    on_failure: continue

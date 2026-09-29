@@ -1,0 +1,38 @@
+assets:
+  - ip: 10.10.10.10
+    name: web-server-01
+    role: web
+    criticality: 0.9
+    owner: it
+    isolatable: true
+  - ip: 10.10.10.11
+    name: db-server-01
+    role: database
+    criticality: 1.0
+    owner: dba
+    isolatable: false  # critical asset: never auto-isolate
+  - ip: 10.10.20.21
+    name: hr-laptop-03
+    role: workstation
+    criticality: 0.5
+    owner: hr
+    isolatable: true
+  - ip: 10.10.20.99
+    name: guest-iot-cam
+    role: iot
+    criticality: 0.2
+    owner: facilities
+    isolatable: true
+  - ip: 10.10.1.1
+    name: lab-gateway
+    role: gateway
+    criticality: 1.0
+    owner: it
+    isolatable: false
+
+attacker_pool:
+  - 10.66.0.5
+  - 10.66.0.6
+  - 10.66.0.7
+
+default_criticality: 0.4

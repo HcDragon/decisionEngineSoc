@@ -1,0 +1,115 @@
+version: 1
+
+scoring:
+  weights:
+    severity: 0.35
+    confidence: 0.25
+    asset: 0.25
+    intel: 0.15
+  repeat_offender:
+    window_s: 300
+    per_event: 2
+    max_bonus: 10
+  min_alert_confidence: 0.40
+
+tiers:
+  low: 0
+  medium: 30
+  high: 60
+  critical: 80
+
+correlation:
+  window_s: 60
+  key:
+    - src_ip
+    - family
+
+attack_families:
+  dos_flood:
+    members:
+      - "DoS SYN Flood"
+      - "DoS UDP Flood"
+      - "DoS DNS Flood"
+      - "DoS ICMP Flood"
+    severity: 0.85
+  recon:
+    members:
+      - "Recon Ping Sweep"
+      - "Recon OS Scan"
+      - "Recon Host Discovery"
+    severity: 0.35
+  brute_force:
+    members:
+      - "Dictionary Brute Force"
+    severity: 0.70
+  mitm:
+    members:
+      - "MITM ARP Spoofing"
+    severity: 0.90
+  benign:
+    members:
+      - "Benign Traffic"
+    severity: 0.0
+
+rules:
+  - id: R-CRIT-AUTO
+    priority: 10
+    description: "Critical + high-confidence attacks with a known-bad or repeat source"
+    when:
+      min_score: 80
+      min_confidence: 0.85
+      min_margin: 0.30
+      any_of:
+        - intel_hit: true
+        - repeat_count_gte: 3
+    then:
+      mode: auto
+      playbook: pb_contain_source
+
+  - id: R-DOS
+    priority: 20
+    description: "DoS Flood attacks requiring traffic mitigation"
+    when:
+      family: dos_flood
+      min_score: 60
+    then:
+      mode: recommend
+      playbook: pb_dos_mitigate
+
+  - id: R-BRUTE
+    priority: 30
+    description: "Brute force attempts locked out with temporary block"
+    when:
+      family: brute_force
+      min_score: 50
+    then:
+      mode: auto
+      playbook: pb_bruteforce_lockout
+
+  - id: R-MITM
+    priority: 40
+    description: "Man-in-the-middle ARP spoofing requiring host isolation"
+    when:
+      family: mitm
+      min_score: 40
+    then:
+      mode: recommend
+      playbook: pb_mitm_isolate
+
+  - id: R-RECON
+    priority: 50
+    description: "Reconnaissance scanning watched with short rate limit"
+    when:
+      family: recon
+      min_score: 30
+    then:
+      mode: auto
+      playbook: pb_recon_watch
+
+  - id: R-DEFAULT
+    priority: 999
+    description: "Default fallback monitor rule"
+    when: {}
+    then:
+      mode: monitor
+      playbook: pb_log_only

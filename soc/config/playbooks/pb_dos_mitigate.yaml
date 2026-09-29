@@ -1,0 +1,34 @@
+id: pb_dos_mitigate
+name: "Mitigate DoS Flood"
+description: "Rate-limit attacking source flow, notify SOC, and create mitigation case"
+mode_defaults:
+  dry_run: true
+steps:
+  - id: s1
+    action: rate_limit
+    params:
+      target: "{{ incident.src_ip }}"
+      pps: 20
+      ttl_s: 600
+    guards:
+      - not_allowlisted
+    rollback:
+      action: unblock_ip
+      params:
+        target: "{{ incident.src_ip }}"
+    on_failure: continue
+  - id: s2
+    action: notify
+    params:
+      channel: dashboard
+      severity: "{{ decision.tier }}"
+      message: "Applied DoS mitigation rate-limit on {{ incident.src_ip }}"
+    on_failure: continue
+  - id: s3
+    action: open_case
+    params:
+      title: "DoS Flood Incident from {{ incident.src_ip }}"
+      priority: "{{ decision.tier }}"
+      attach:
+        - score_breakdown
+    on_failure: continue

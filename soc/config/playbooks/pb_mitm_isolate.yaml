@@ -1,0 +1,34 @@
+id: pb_mitm_isolate
+name: "Isolate MITM Host"
+description: "Isolate compromised host engaged in ARP spoofing after safety guardrails check"
+mode_defaults:
+  dry_run: true
+steps:
+  - id: s1
+    action: isolate_host
+    params:
+      target: "{{ incident.src_ip }}"
+      ttl_s: 1800
+    guards:
+      - not_allowlisted
+      - asset_is_isolatable
+    rollback:
+      action: unisolate_host
+      params:
+        target: "{{ incident.src_ip }}"
+    on_failure: abort
+  - id: s2
+    action: notify
+    params:
+      channel: dashboard
+      severity: "{{ decision.tier }}"
+      message: "Host {{ incident.src_ip }} isolated due to MITM ARP spoofing"
+    on_failure: continue
+  - id: s3
+    action: open_case
+    params:
+      title: "Critical: MITM ARP Spoofing from {{ incident.src_ip }}"
+      priority: "CRITICAL"
+      attach:
+        - explanation
+    on_failure: continue

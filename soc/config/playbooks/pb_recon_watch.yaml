@@ -1,0 +1,20 @@
+id: pb_recon_watch
+name: "Watch Reconnaissance Source"
+description: "Notify dashboard, apply low rate-limit, and flag asset"
+mode_defaults:
+  dry_run: true
+steps:
+  - id: s1
+    action: rate_limit
+    params:
+      target: "{{ incident.src_ip }}"
+      pps: 50
+      ttl_s: 300
+    on_failure: continue
+  - id: s2
+    action: notify
+    params:
+      channel: dashboard
+      severity: "{{ decision.tier }}"
+      message: "Recon activity monitored from {{ incident.src_ip }}"
+    on_failure: continue

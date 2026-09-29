@@ -1,0 +1,13 @@
+id: pb_log_only
+name: "Log Only"
+description: "Audit logging and dashboard notification without active network intervention"
+mode_defaults:
+  dry_run: true
+steps:
+  - id: s1
+    action: notify
+    params:
+      channel: dashboard
+      severity: "{{ decision.tier }}"
+      message: "Event logged for {{ incident.src_ip }} -> {{ incident.family }}"
+    on_failure: continue

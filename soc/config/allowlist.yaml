@@ -1,0 +1,13 @@
+allowlist:
+  - ip: 127.0.0.1
+    description: "Localhost loopback"
+  - ip: 10.10.1.1
+    description: "Lab default gateway"
+  - ip: 10.10.1.2
+    description: "Internal DNS server"
+  - ip: 10.10.10.11
+    description: "Core database server (criticality 1.0)"
+  - ip: 10.10.100.5
+    description: "SOC Analyst workstation primary"
+  - ip: 10.10.100.10
+    description: "SOC API / Dashboard Host"
