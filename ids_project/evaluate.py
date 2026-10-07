@@ -1,6 +1,6 @@
 from sklearn.metrics import accuracy_score, f1_score, classification_report
 
-def evaluate_model(model, X_test, y_test, encoder):
+def evaluate_model(model, X_test, y_test, encoder, feature_names=None):
     y_pred = model.predict(X_test)
     y_proba = model.predict_proba(X_test)
 

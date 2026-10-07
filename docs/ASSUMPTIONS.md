@@ -20,3 +20,12 @@ This document outlines key technical and operational assumptions made during the
 
 ## 4. Hash-Chained Audit Trail
 - Every critical state transition, analyst approval, rule execution, and system mode change appends a cryptographically verified, hash-chained record (`sha256(prev_hash + canonical_json(payload))`).
+- Implemented in `soc/backend/app/audit/chain.py`. Genesis `prev_hash` is 64 zeros; `verify_chain()` recomputes the whole chain and reports the first break.
+
+## 5. Risk Scoring — Benign Carries Zero Risk (F0 design decision)
+- The weighted risk formula (`severity·0.35 + confidence·0.25 + asset·0.25 + intel·0.15`, +repeat-offender bonus capped at 10) treats the confidence, asset, and intel weights as amplifiers of an **attack** signal.
+- Therefore a **benign** classification (family `benign`, severity 0.0) is scored **0.0 / LOW** regardless of model confidence or how critical the destination asset is. Rationale: a benign flow to a critical server must not score MEDIUM purely because the model is 99% sure it is benign and the target is valuable. Benign flows are handled by the default `monitor`/`pb_log_only` rule and never open an incident.
+- Consequence: `min_alert_confidence` (0.40) gates whether an **attack** classification becomes an alert at all; benign flows are counted for telemetry but not scored as risk.
+
+## 6. Policy Versioning
+- `load_policy_bundle()` computes a deterministic `policy_hash` (SHA-256 over the normalized policies/assets/allowlist/intel/playbook inputs). Every Decision stores this hash so it can be traced to the exact policy version that produced it. `reload_policy()` supports hot reload.
