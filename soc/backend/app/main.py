@@ -14,6 +14,7 @@ from soc.backend.app.config import settings
 from soc.backend.app.db.session import check_db_health, init_db
 from soc.backend.app.monitor.streamer import traffic_monitor
 from soc.backend.app.api.traffic import router as traffic_router
+from soc.backend.app.api.engine import router as engine_router
 
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
@@ -46,6 +47,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Error starting traffic monitor: {e}")
 
+    # Start the virtual-firewall TTL reaper (expires blocks, removes nft rules).
+    try:
+        from soc.backend.app.response import reaper
+        reaper.start()
+    except Exception as e:
+        logger.error(f"Error starting firewall reaper: {e}")
+
     yield
 
     logger.info("Shutting down AI-Based Smart SOC Manager...")
@@ -53,6 +61,11 @@ async def lifespan(app: FastAPI):
         traffic_monitor.stop()
     except Exception as e:
         logger.error(f"Error stopping traffic monitor: {e}")
+    try:
+        from soc.backend.app.response import reaper
+        reaper.stop()
+    except Exception as e:
+        logger.error(f"Error stopping firewall reaper: {e}")
 
 
 def create_app() -> FastAPI:
@@ -75,6 +88,7 @@ def create_app() -> FastAPI:
 
     # Routers
     app.include_router(traffic_router)
+    app.include_router(engine_router)
 
 
     class HealthResponse(BaseModel):

@@ -55,3 +55,7 @@ yarn-error.log*
 *.pkl
 !ids_project/*.pkl
 ids_project/dataset/*.csv
+
+# Runtime pid files
+*.pid
+testlab/.backend.pid

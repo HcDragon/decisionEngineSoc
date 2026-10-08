@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     CONFIG_DIR: str = Field(default="soc/config")
     MODEL_DIR: str = Field(default="ids_project")
 
+    # Capture interface the live monitor binds to. Empty/"any" captures all
+    # interfaces; set to e.g. "veth-def" for the namespace test lab.
+    SOC_CAPTURE_IFACE: str = Field(default="any")
+
     # Safety Guardrails
     SOC_EXECUTOR: Literal["dry_run", "simulated", "lab"] = Field(default="dry_run")
     SOC_LAB_MODE: bool = Field(default=False)

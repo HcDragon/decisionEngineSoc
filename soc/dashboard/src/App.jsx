@@ -15,7 +15,11 @@ import {
   CheckCircle2,
   Sliders,
   Terminal,
-  Database
+  Database,
+  ShieldCheck,
+  Hand,
+  Ban,
+  Unlock
 } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -199,6 +203,53 @@ export default function App() {
     }
   };
 
+  // Manual defence: contain (block) an incident source
+  const handleRespond = async (incidentId) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/incidents/${incidentId}/respond`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'block_ip' }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(
+          data.status === 'already_blocked'
+            ? `Source ${data.target} is already contained`
+            : `Blocked ${data.target} (${data.enforcement})`
+        );
+        fetchOverview();
+      } else {
+        showToast(data.detail || 'Block refused');
+      }
+    } catch (err) {
+      showToast(`Failed to block: ${err.message}`);
+    }
+  };
+
+  // Manual defence: lift containment on an incident source
+  const handleRelease = async (incidentId) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/incidents/${incidentId}/release`, { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(`Released ${data.target} (${data.released} rule(s) lifted)`);
+        fetchOverview();
+      } else {
+        showToast(data.detail || 'Release failed');
+      }
+    } catch (err) {
+      showToast(`Failed to release: ${err.message}`);
+    }
+  };
+
+  // Defence posture derived from the global automation mode:
+  //   auto           -> AUTOMATIC (engine blocks on its own)
+  //   recommend_only -> MANUAL    (analyst clicks Block)
+  //   off            -> OFF       (monitor only)
+  const isManual = automationMode === 'recommend_only';
+  const isAuto = automationMode === 'auto';
+
   // Protocol calculation
   const totalProtoCount = Math.max(
     1,
@@ -238,25 +289,30 @@ export default function App() {
             EXECUTOR: {executorMode.toUpperCase()}
           </div>
 
-          {/* Global Kill Switch */}
-          <div className="mode-switcher" title="Global Automation Kill Switch">
+          {/* Defence Mode Switch (Automatic by default; switch to Manual to approve blocks yourself) */}
+          <div className="mode-switcher" title="Defence posture: Automatic blocks threats on its own; Manual waits for you to approve each block; Off only monitors.">
+            <button
+              className={`mode-btn ${isAuto ? 'active-auto' : ''}`}
+              onClick={() => handleModeChange('auto')}
+              title="Engine blocks malicious sources automatically"
+            >
+              <ShieldCheck size={13} style={{ marginRight: 4, verticalAlign: '-2px' }} />
+              AUTOMATIC
+            </button>
+            <button
+              className={`mode-btn ${isManual ? 'active-recommend' : ''}`}
+              onClick={() => handleModeChange('recommend_only')}
+              title="You approve each block from the incidents panel"
+            >
+              <Hand size={13} style={{ marginRight: 4, verticalAlign: '-2px' }} />
+              MANUAL
+            </button>
             <button
               className={`mode-btn ${automationMode === 'off' ? 'active-off' : ''}`}
               onClick={() => handleModeChange('off')}
+              title="Monitor only — no containment"
             >
               OFF
-            </button>
-            <button
-              className={`mode-btn ${automationMode === 'recommend_only' ? 'active-recommend' : ''}`}
-              onClick={() => handleModeChange('recommend_only')}
-            >
-              RECOMMEND
-            </button>
-            <button
-              className={`mode-btn ${automationMode === 'auto' ? 'active-auto' : ''}`}
-              onClick={() => handleModeChange('auto')}
-            >
-              AUTO
             </button>
           </div>
         </div>
@@ -542,6 +598,25 @@ export default function App() {
                 </span>
               </div>
 
+              {/* Defence posture banner */}
+              <div
+                className="badge"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12, width: '100%',
+                  padding: '7px 11px', fontSize: '0.74rem', borderRadius: 8,
+                  background: isAuto ? 'rgba(0,255,194,0.1)' : isManual ? 'rgba(0,240,255,0.1)' : 'rgba(157,78,221,0.1)',
+                  border: `1px solid ${isAuto ? 'rgba(0,255,194,0.35)' : isManual ? 'rgba(0,240,255,0.35)' : 'rgba(157,78,221,0.35)'}`,
+                  color: isAuto ? '#00ffc2' : isManual ? '#00f0ff' : '#9d4edd',
+                }}
+              >
+                {isAuto ? <ShieldCheck size={13} /> : isManual ? <Hand size={13} /> : <Shield size={13} />}
+                {isAuto
+                  ? 'Automatic defence — threats are contained by the engine as they are detected.'
+                  : isManual
+                    ? 'Manual defence — review each incident and click Block to contain it.'
+                    : 'Defence Off — monitoring only, no containment.'}
+              </div>
+
               <div>
                 {!overview?.recent_incidents || overview.recent_incidents.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
@@ -549,22 +624,55 @@ export default function App() {
                     No active threats on network. System normal.
                   </div>
                 ) : (
-                  overview.recent_incidents.map((inc) => (
+                  overview.recent_incidents.map((inc) => {
+                    const contained = inc.status === 'contained';
+                    return (
                     <div key={inc.id} className="incident-item">
                       <div className="incident-info">
                         <span className="incident-ip">{inc.src_ip}</span>
                         <span className="incident-family">{inc.family} ({inc.alert_count} alerts)</span>
                       </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <span className={`incident-risk ${inc.max_risk >= 75 ? 'risk-critical' : inc.max_risk >= 50 ? 'risk-high' : 'risk-med'}`}>
-                          Risk {inc.max_risk.toFixed(1)}
-                        </span>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                          {inc.status}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ textAlign: 'right' }}>
+                          <span className={`incident-risk ${inc.max_risk >= 75 ? 'risk-critical' : inc.max_risk >= 50 ? 'risk-high' : 'risk-med'}`}>
+                            Risk {inc.max_risk.toFixed(1)}
+                          </span>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                            {inc.status}
+                          </div>
                         </div>
+
+                        {/* Manual defence controls — shown unless fully automatic */}
+                        {!isAuto && (
+                          contained ? (
+                            <button
+                              className="action-btn secondary"
+                              style={{ padding: '6px 10px', fontSize: '0.72rem' }}
+                              onClick={() => handleRelease(inc.id)}
+                              title={`Lift containment on ${inc.src_ip}`}
+                            >
+                              <Unlock size={13} /> Release
+                            </button>
+                          ) : (
+                            <button
+                              className="action-btn danger"
+                              style={{ padding: '6px 10px', fontSize: '0.72rem' }}
+                              onClick={() => handleRespond(inc.id)}
+                              title={`Block ${inc.src_ip}`}
+                            >
+                              <Ban size={13} /> Block
+                            </button>
+                          )
+                        )}
+                        {isAuto && contained && (
+                          <span className="badge" style={{ fontSize: '0.68rem', color: '#00ffc2', border: '1px solid rgba(0,255,194,0.3)' }}>
+                            <Lock size={11} /> Auto-contained
+                          </span>
+                        )}
                       </div>
                     </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>

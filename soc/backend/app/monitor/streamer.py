@@ -52,9 +52,17 @@ class FlowRecord(BaseModel):
     risk_score: float = 0.0
 
 
+def _default_iface() -> str:
+    try:
+        from soc.backend.app.config import settings
+        return settings.SOC_CAPTURE_IFACE or "any"
+    except Exception:
+        return "any"
+
+
 class PortMonitorConfig(BaseModel):
     target_port: int = 8000
-    interface: str = "any"
+    interface: str = Field(default_factory=_default_iface)
     promiscuous_mode: bool = True
     active_timeout: int = 2
     idle_timeout: int = 1
@@ -181,9 +189,15 @@ class NetworkTrafficMonitor:
                 bpf = f"port {self.config.target_port}"
                 source_iface = self.config.interface
                 if source_iface == "any" or not source_iface:
-                    # On macOS, "any" pseudo-device does not exist in BSD BPF.
-                    # Setting to None lets NFStreamer auto-select the active default interface (e.g. en0).
-                    source_iface = None
+                    if IS_MACOS:
+                        # On macOS, the "any" pseudo-device does not exist in BSD BPF.
+                        # None lets NFStreamer auto-select the active default interface (e.g. en0).
+                        source_iface = None
+                    else:
+                        # On Linux the libpcap "any" pseudo-device captures across all
+                        # interfaces; passing None here fails with "specify a valid
+                        # network interface name as source". Keep the literal "any".
+                        source_iface = "any"
 
                 logger.info(f"Attempting native NFStreamer tap on interface: {source_iface or 'auto'} (filter: '{bpf}')")
                 streamer = NFStreamer(
@@ -227,6 +241,9 @@ class NetworkTrafficMonitor:
             dur = float(getattr(flow, "bidirectional_duration_ms", 10.0))
             app = str(getattr(flow, "application_name", f"port_{self.config.target_port}"))
 
+            # Best-effort live classification by the IDS model (if artifacts loaded).
+            label, conf, is_threat = self._classify_native(flow)
+
             rec = FlowRecord(
                 id=f"flow-{int(time.time() * 1000)}-{random.randint(100, 999)}",
                 timestamp=datetime.now(timezone.utc).strftime("%H:%M:%S.%f")[:-3],
@@ -239,14 +256,108 @@ class NetworkTrafficMonitor:
                 bidirectional_packets=pkts,
                 bidirectional_bytes=bytes_len,
                 duration_ms=dur,
-                threat_label="Benign Traffic",
-                is_threat=False,
-                confidence=0.98,
+                threat_label=label,
+                is_threat=is_threat,
+                confidence=conf,
                 risk_score=5.0,
             )
             self._append_flow(rec)
         except Exception as err:
             logger.error(f"Error parsing native flow: {err}")
+
+    def _classify_native(self, flow: Any) -> tuple:
+        """Classify a live NFStream flow with the IDS model.
+
+        Returns ``(label, confidence_fraction, is_threat)``. Falls back to benign
+        when the model artifacts are absent or the flow's features cannot be
+        aligned to the model's expected columns (see docs/ASSUMPTIONS.md §2 and
+        DEMO_SIMULATION.md §6 — the training set has no IP columns and live
+        NFStream features won't line up 1:1, so this is best-effort).
+        """
+        if not self._model_loaded or self._model is None or self._feature_names is None:
+            # No ML artifacts: fall back to the flow-metadata heuristic detector so
+            # real network-layer attacks on the monitored target still surface.
+            return self._heuristic_classify(flow)
+        try:
+            import numpy as np
+
+            # Build a feature vector aligned to the model's expected columns,
+            # pulling any same-named attribute off the NFStream flow, 0-filling
+            # the rest. Unknown columns stay 0 rather than crashing the capture.
+            row = []
+            for name in self._feature_names:
+                attr = str(name).strip().lower().replace(" ", "_")
+                val = getattr(flow, attr, None)
+                try:
+                    row.append(float(val) if val is not None else 0.0)
+                except (TypeError, ValueError):
+                    row.append(0.0)
+            X = np.array([row], dtype=float)
+            if self._scaler is not None:
+                X = self._scaler.transform(X)
+
+            pred = self._model.predict(X)
+            label = str(self._encoder.inverse_transform(pred)[0]) if self._encoder is not None else str(pred[0])
+
+            conf = 0.90
+            if hasattr(self._model, "predict_proba"):
+                proba = self._model.predict_proba(X)[0]
+                conf = float(np.max(proba))
+
+            is_threat = label.strip().lower() not in ("benign", "benign traffic", "normal")
+            return (label, conf, is_threat)
+        except Exception as e:
+            logger.debug(f"Live model classification failed, using heuristic: {e}")
+            return self._heuristic_classify(flow)
+
+    # Ports where a burst of short sessions from one source looks like a
+    # credential brute-force rather than normal traffic.
+    _AUTH_PORTS = {21, 22, 23, 389, 445, 1433, 3306, 3389, 5432, 5900}
+
+    def _heuristic_classify(self, flow: Any) -> tuple:
+        """Signature-free, flow-metadata heuristic detector used when no ML model
+        is loaded. Recognises clear NETWORK-layer attack shapes from NFStream's
+        per-flow counters (packets/bytes/duration/ports). Deliberately conservative
+        so normal web browsing of the target is not flagged.
+
+        Cannot see HTTP payloads, so application-layer attacks (SQLi/XSS/login
+        abuse against Juice Shop) are invisible here by design — only network-layer
+        attacks (floods, scans, auth brute force) are detectable from flow shape.
+        The SOC's correlation + repeat-offender logic aggregates these per source.
+        """
+        try:
+            pkts = int(getattr(flow, "bidirectional_packets", 0) or 0)
+            nbytes = int(getattr(flow, "bidirectional_bytes", 0) or 0)
+            dur = float(getattr(flow, "bidirectional_duration_ms", 0.0) or 0.0)
+            proto = int(getattr(flow, "protocol", 6) or 6)
+            dst_port = int(getattr(flow, "dst_port", 0) or 0)
+            bytes_per_pkt = nbytes / pkts if pkts else 0.0
+
+            # 1) Flood: a single flow carrying a large burst of tiny packets.
+            #    Real HTTP flows carry far more bytes/packet, so this won't trip
+            #    on page loads. UDP vs SYN(TCP) by protocol.
+            if pkts >= 200 and bytes_per_pkt <= 100:
+                if proto == 17:
+                    return ("DoS UDP Flood", 0.80, True)
+                return ("DoS SYN Flood", 0.80, True)
+
+            # 2) Recon scan probe: a connection with no real payload — a bare
+            #    SYN/SYN-ACK/RST exchange, the shape nmap leaves on each probed
+            #    port. A refused probe is ~2 packets / ~130 bytes; allow a little
+            #    headroom while staying far below any real data flow (a tiny HTTP
+            #    GET is already ~12 packets / ~1900 bytes).
+            if pkts <= 4 and nbytes <= 300 and dur <= 200.0:
+                return ("Recon OS Scan", 0.62, True)
+
+            # 3) Auth brute force: short repeated sessions against a login service.
+            #    Only meaningful when the monitored service is an auth port.
+            if dst_port in self._AUTH_PORTS and 3 <= pkts <= 40 and dur <= 3000.0:
+                return ("Dictionary Brute Force", 0.68, True)
+
+            return ("Benign Traffic", 0.95, False)
+        except Exception as e:
+            logger.debug(f"Heuristic classify fell back to benign: {e}")
+            return ("Benign Traffic", 0.95, False)
 
     def _run_emulation_loop(self):
         """Generate representative flow traffic on target port with attack scenarios."""
@@ -348,6 +459,56 @@ class NetworkTrafficMonitor:
                 self.packets_in_window = 0
                 self.bytes_in_window = 0
                 self.last_rate_check = now
+
+        # Feed the decision engine OUTSIDE the lock (DB work must not block
+        # get_status / other appends). Benign flows are telemetry-only.
+        self._dispatch_to_engine(rec)
+
+    def _dispatch_to_engine(self, rec: "FlowRecord") -> None:
+        """Run the full decision pipeline for a threat-candidate flow.
+
+        Resilient by contract: any failure here must never kill the capture
+        thread, so all errors are swallowed with a warning. Benign flows are
+        skipped cheaply before a DB session is opened.
+        """
+        if rec.threat_label == "Benign Traffic" and not rec.is_threat:
+            return
+        try:
+            from soc.backend.app.db.session import SessionLocal
+            from soc.backend.app.policy.loader import get_policy
+            from soc.backend.app.decision.pipeline import process_flow
+
+            policy = get_policy()
+            db = SessionLocal()
+            try:
+                result = process_flow(
+                    db,
+                    policy,
+                    src_ip=rec.src_ip,
+                    dst_ip=rec.dst_ip,
+                    src_port=rec.src_port,
+                    dst_port=rec.dst_port,
+                    label=rec.threat_label,
+                    confidence=rec.confidence,
+                    model_version=f"monitor:{self.engine_mode}",
+                    raw_features={
+                        "protocol": rec.protocol,
+                        "bidirectional_packets": rec.bidirectional_packets,
+                        "bidirectional_bytes": rec.bidirectional_bytes,
+                        "duration_ms": rec.duration_ms,
+                        "application_name": rec.application_name,
+                    },
+                )
+                if result:
+                    logger.info(
+                        "Decision raised: incident=%s family=%s risk=%s tier=%s rule=%s mode=%s",
+                        result["incident_id"], result["family"], result["risk_score"],
+                        result["tier"], result["rule_id"], result["mode"],
+                    )
+            finally:
+                db.close()
+        except Exception as e:
+            logger.warning(f"Decision pipeline dispatch failed for flow {rec.id}: {e}")
 
     def get_status(self) -> PortMonitorStats:
         """Get live operational stats for the monitored port."""
