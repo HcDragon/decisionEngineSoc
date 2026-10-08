@@ -53,9 +53,12 @@ curl -s --max-time 3 -X POST http://127.0.0.1:8000/api/traffic/port \
 
 echo "[4/5] dashboard"
 if [ "$START_DASHBOARD" = "1" ] && [ -d soc/dashboard/node_modules ]; then
-    setsid bash -c 'cd soc/dashboard && npm run dev -- --host 0.0.0.0 --port 3001' \
+    # Run Vite as the REAL user, never as root — root-owned files under
+    # node_modules/.vite* would otherwise break later non-root `npm run dev`.
+    DASH_USER="${SUDO_USER:-$(id -un)}"
+    setsid sudo -u "$DASH_USER" bash -c 'cd soc/dashboard && npm run dev -- --host 0.0.0.0 --port 3001' \
         >/tmp/soc_dash.log 2>&1 < /dev/null &
-    echo "      dashboard dev server starting on http://localhost:3001"
+    echo "      dashboard dev server starting on http://localhost:3001 (as $DASH_USER)"
 else
     echo "      skipped (set START_DASHBOARD=1 and run 'npm install' in soc/dashboard to enable)"
 fi
