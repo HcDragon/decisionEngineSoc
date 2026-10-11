@@ -26,7 +26,13 @@ fi
 
 if [ -z "$WORDLIST" ]; then
     WORDLIST="$(mktemp /tmp/soc_brute_wl.XXXX)"
-    printf 'alpha\nbravo\ncharlie\ndelta\necho\nfoxtrot\ngolf\nhotel\n' > "$WORDLIST"
+    # 16 attempts, not 8: the rate rule needs >5 SEPARATE short flows in its 10s
+    # window. hydra's ssh module reconnects per password attempt, so N passwords
+    # => ~N flows; 16 gives comfortable headroom above the threshold even if a
+    # couple of attempts happen to share a connection. (Tune the detector side
+    # with SOC_BRUTE_COUNT / SOC_BRUTE_WINDOW_S if your hydra batches attempts.)
+    printf 'alpha\nbravo\ncharlie\ndelta\necho\nfoxtrot\ngolf\nhotel\n'  > "$WORDLIST"
+    printf 'india\njuliet\nkilo\nlima\nmike\nnovember\noscar\npapa\n'   >> "$WORDLIST"
     trap 'rm -f "$WORDLIST"' EXIT
 fi
 

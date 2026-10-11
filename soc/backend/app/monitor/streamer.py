@@ -56,6 +56,9 @@ class FlowRecord(BaseModel):
     probabilities: Dict[str, float] = Field(default_factory=dict)
     margin: float = 0.0
     model_features: Dict[str, float] = Field(default_factory=dict)
+    # Provenance of the verdict: "monitor:<engine>" for ML, "rate-rule:*" for the
+    # cross-flow rate detector. Surfaced as model_version on the alert.
+    detector: str = ""
 
 
 def _default_iface() -> str:
@@ -129,6 +132,11 @@ class NetworkTrafficMonitor:
         self._encoder = None
         self._feature_names = None
         self._model_loaded = False
+
+        # Cross-flow rate detector (volumetric flood + auth brute force) — runs
+        # alongside ML scoring and can override the verdict. See rate_rules.py.
+        from soc.backend.app.monitor.rate_rules import RateDetector
+        self._rate_detector = RateDetector()
 
     def _try_load_model(self):
         """Attempt to load the pre-trained IDS model for real-time flow classification."""
@@ -256,17 +264,42 @@ class NetworkTrafficMonitor:
             dur = float(getattr(flow, "bidirectional_duration_ms", 10.0))
             app = str(getattr(flow, "application_name", f"port_{self.config.target_port}"))
 
+            src_ip = str(getattr(flow, "src_ip", "192.168.1.100"))
+            src_port = int(getattr(flow, "src_port", random.randint(1024, 65535)))
+            dst_ip = str(getattr(flow, "dst_ip", "10.0.0.1"))
+            dst_port = int(getattr(flow, "dst_port", self.config.target_port))
+
             # Best-effort live classification by the IDS model (if artifacts loaded).
             cls = self._classify_native(flow)
             label, conf, is_threat = cls["label"], cls["confidence"], cls["is_threat"]
+            probabilities = cls.get("probabilities", {})
+            margin = cls.get("margin", 0.0)
+            detector = f"monitor:{self.engine_mode}"
+
+            # Cross-flow rate layer: volumetric flood + auth brute force. Runs
+            # independently of the ML verdict and OVERRIDES it when it fires —
+            # these attacks are invisible to a per-flow classifier (one giant
+            # out-of-distribution flow, or a signal that only exists across
+            # flows). See rate_rules.py.
+            rate = self._rate_detector.inspect(
+                src_ip=src_ip, dst_ip=dst_ip, dst_port=dst_port,
+                packets=pkts,
+                syn=int(getattr(flow, "bidirectional_syn_packets", 0) or 0),
+                ack=int(getattr(flow, "bidirectional_ack_packets", 0) or 0),
+                duration_ms=dur,
+            )
+            if rate is not None:
+                label, conf, is_threat = rate["label"], rate["confidence"], True
+                probabilities, margin, detector = rate["probabilities"], rate["margin"], rate["detector"]
+                logger.info("Rate rule fired [%s]: %s", rate["detector"], rate["reason"])
 
             rec = FlowRecord(
                 id=f"flow-{int(time.time() * 1000)}-{random.randint(100, 999)}",
                 timestamp=datetime.now(timezone.utc).strftime("%H:%M:%S.%f")[:-3],
-                src_ip=str(getattr(flow, "src_ip", "192.168.1.100")),
-                src_port=int(getattr(flow, "src_port", random.randint(1024, 65535))),
-                dst_ip=str(getattr(flow, "dst_ip", "10.0.0.1")),
-                dst_port=int(getattr(flow, "dst_port", self.config.target_port)),
+                src_ip=src_ip,
+                src_port=src_port,
+                dst_ip=dst_ip,
+                dst_port=dst_port,
                 protocol=proto,
                 application_name=app,
                 bidirectional_packets=pkts,
@@ -276,9 +309,10 @@ class NetworkTrafficMonitor:
                 is_threat=is_threat,
                 confidence=conf,
                 risk_score=5.0,
-                probabilities=cls.get("probabilities", {}),
-                margin=cls.get("margin", 0.0),
+                probabilities=probabilities,
+                margin=margin,
                 model_features=cls.get("features", {}),
+                detector=detector,
             )
             self._append_flow(rec)
         except Exception as err:
@@ -543,7 +577,7 @@ class NetworkTrafficMonitor:
                     # explanation panel; empty for heuristic-fallback flows.
                     margin=rec.margin,
                     probabilities=rec.probabilities or None,
-                    model_version=f"monitor:{self.engine_mode}",
+                    model_version=rec.detector or f"monitor:{self.engine_mode}",
                     raw_features={
                         "protocol": rec.protocol,
                         "bidirectional_packets": rec.bidirectional_packets,

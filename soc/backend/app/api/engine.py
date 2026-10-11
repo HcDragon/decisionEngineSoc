@@ -72,6 +72,14 @@ def _alert_dict(a: Alert) -> Dict[str, Any]:
         "label": a.label,
         "family": a.family,
         "confidence": a.confidence,
+        # Explainability payload: ML probability distribution + top-2 margin,
+        # the detector provenance (ml model vs rate-rule), and the raw/model
+        # feature snapshot, so the dashboard can show *why* the alert fired.
+        "margin": a.margin,
+        "probabilities": a.probabilities,
+        "top_features": a.top_features,
+        "model_version": a.model_version,
+        "raw_features": a.raw_features,
         "incident_id": a.incident_id,
     }
 

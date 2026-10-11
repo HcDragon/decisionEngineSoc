@@ -19,7 +19,10 @@ import {
   ShieldCheck,
   Hand,
   Ban,
-  Unlock
+  Unlock,
+  X,
+  FileText,
+  Gauge
 } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -52,6 +55,30 @@ export default function App() {
   const [threatOnly, setThreatOnly] = useState(false);
   const [overview, setOverview] = useState(null);
   const [isLivePolling, setIsLivePolling] = useState(true);
+
+  // Incident detail drill-down (click a row in Active SOC Incidents)
+  const [detailId, setDetailId] = useState(null);
+  const [detail, setDetail] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  const openIncident = async (id) => {
+    setDetailId(id);
+    setDetail(null);
+    setDetailLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/incidents/${id}`);
+      if (res.ok) setDetail(await res.json());
+    } catch (err) {
+      /* ignore — modal shows a load error state */
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+  const closeIncident = () => { setDetailId(null); setDetail(null); };
+
+  // Confidence may arrive as a fraction (0.85 from the ML model) or a percentage
+  // (88.5 from the emulation stream). Render both as a clean "85%".
+  const fmtConf = (c) => `${(Number(c) <= 1 ? Number(c) * 100 : Number(c)).toFixed(0)}%`;
 
   const showToast = (msg) => {
     setToastMsg(msg);
@@ -285,7 +312,7 @@ export default function App() {
 
           {/* Executor Badge */}
           <div className="status-badge" style={{ borderColor: 'rgba(56, 189, 248, 0.3)' }}>
-            <Cpu size={14} color="#00f0ff" />
+            <Cpu size={14} color="#3b82f6" />
             EXECUTOR: {executorMode.toUpperCase()}
           </div>
 
@@ -329,7 +356,7 @@ export default function App() {
               <span className="metric-unit">pkts/s</span>
             </div>
             <div className="metric-footer">
-              <Activity size={13} color="#00f0ff" />
+              <Activity size={13} color="#3b82f6" />
               Bandwidth: {trafficStats.current_kb_per_sec} KB/s
             </div>
           </div>
@@ -341,21 +368,21 @@ export default function App() {
               <span className="metric-unit">flows</span>
             </div>
             <div className="metric-footer">
-              <Radio size={13} color="#00ffc2" />
+              <Radio size={13} color="#2ea043" />
               Total: {(trafficStats.total_bytes / 1024).toFixed(1)} KB metered
             </div>
           </div>
 
           <div className="metric-card accent-crimson">
             <div className="metric-label">Threat Anomaly Rate</div>
-            <div className="metric-value" style={{ color: trafficStats.threat_flows_count > 0 ? '#ff3366' : '#00ffc2' }}>
+            <div className="metric-value" style={{ color: trafficStats.threat_flows_count > 0 ? '#e5484d' : '#2ea043' }}>
               {trafficStats.total_flows > 0
                 ? ((trafficStats.threat_flows_count / trafficStats.total_flows) * 100).toFixed(1)
                 : '0.0'}
               <span className="metric-unit">%</span>
             </div>
             <div className="metric-footer">
-              <AlertTriangle size={13} color="#ff3366" />
+              <AlertTriangle size={13} color="#e5484d" />
               {trafficStats.threat_flows_count} IDS threat detections
             </div>
           </div>
@@ -367,7 +394,7 @@ export default function App() {
               <span className="metric-unit">blocks</span>
             </div>
             <div className="metric-footer">
-              <Lock size={13} color="#9d4edd" />
+              <Lock size={13} color="#8b5cf6" />
               Virtual Firewall Guardrails Active
             </div>
           </div>
@@ -377,7 +404,7 @@ export default function App() {
         <section className="port-selector-bar">
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Wifi size={18} color="#00f0ff" />
+              <Wifi size={18} color="#3b82f6" />
               <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Target Port:</span>
             </div>
 
@@ -422,9 +449,9 @@ export default function App() {
             <span
               className="badge"
               style={{
-                background: 'rgba(0, 240, 255, 0.12)',
-                color: '#00f0ff',
-                border: '1px solid rgba(0, 240, 255, 0.3)',
+                background: 'rgba(59,130,246,0.12)',
+                color: '#3b82f6',
+                border: '1px solid rgba(59,130,246,0.35)',
                 padding: '6px 12px',
               }}
               title="NFStream DPI Engine Mode"
@@ -518,11 +545,11 @@ export default function App() {
                         <td>
                           {flow.is_threat ? (
                             <span className="badge threat">
-                              <AlertTriangle size={11} /> {flow.threat_label} ({flow.confidence}%)
+                              <AlertTriangle size={11} /> {flow.threat_label} ({fmtConf(flow.confidence)})
                             </span>
                           ) : (
                             <span className="badge benign">
-                              <CheckCircle2 size={11} /> Benign ({flow.confidence}%)
+                              <CheckCircle2 size={11} /> Benign ({fmtConf(flow.confidence)})
                             </span>
                           )}
                         </td>
@@ -591,7 +618,7 @@ export default function App() {
             <div className="glass-card" style={{ flex: 1 }}>
               <div className="card-header">
                 <div className="card-title">
-                  <AlertTriangle size={18} color="#ff3366" /> Active SOC Incidents
+                  <AlertTriangle size={18} color="#e5484d" /> Active SOC Incidents
                 </div>
                 <span className="badge benign" style={{ fontSize: '0.7rem' }}>
                   {overview?.stats?.open_incidents ?? 0} Open
@@ -604,9 +631,9 @@ export default function App() {
                 style={{
                   display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12, width: '100%',
                   padding: '7px 11px', fontSize: '0.74rem', borderRadius: 8,
-                  background: isAuto ? 'rgba(0,255,194,0.1)' : isManual ? 'rgba(0,240,255,0.1)' : 'rgba(157,78,221,0.1)',
-                  border: `1px solid ${isAuto ? 'rgba(0,255,194,0.35)' : isManual ? 'rgba(0,240,255,0.35)' : 'rgba(157,78,221,0.35)'}`,
-                  color: isAuto ? '#00ffc2' : isManual ? '#00f0ff' : '#9d4edd',
+                  background: isAuto ? 'rgba(46,160,67,0.14)' : isManual ? 'rgba(59,130,246,0.12)' : 'rgba(139,92,246,0.14)',
+                  border: `1px solid ${isAuto ? 'rgba(46,160,67,0.4)' : isManual ? 'rgba(59,130,246,0.4)' : 'rgba(139,92,246,0.4)'}`,
+                  color: isAuto ? '#2ea043' : isManual ? '#3b82f6' : '#8b5cf6',
                 }}
               >
                 {isAuto ? <ShieldCheck size={13} /> : isManual ? <Hand size={13} /> : <Shield size={13} />}
@@ -620,14 +647,19 @@ export default function App() {
               <div>
                 {!overview?.recent_incidents || overview.recent_incidents.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                    <CheckCircle2 size={24} color="#00ffc2" style={{ margin: '0 auto 8px', display: 'block' }} />
+                    <CheckCircle2 size={24} color="#2ea043" style={{ margin: '0 auto 8px', display: 'block' }} />
                     No active threats on network. System normal.
                   </div>
                 ) : (
                   overview.recent_incidents.map((inc) => {
                     const contained = inc.status === 'contained';
                     return (
-                    <div key={inc.id} className="incident-item">
+                    <div
+                      key={inc.id}
+                      className="incident-item clickable"
+                      onClick={() => openIncident(inc.id)}
+                      title="View detailed analysis"
+                    >
                       <div className="incident-info">
                         <span className="incident-ip">{inc.src_ip}</span>
                         <span className="incident-family">{inc.family} ({inc.alert_count} alerts)</span>
@@ -648,7 +680,7 @@ export default function App() {
                             <button
                               className="action-btn secondary"
                               style={{ padding: '6px 10px', fontSize: '0.72rem' }}
-                              onClick={() => handleRelease(inc.id)}
+                              onClick={(e) => { e.stopPropagation(); handleRelease(inc.id); }}
                               title={`Lift containment on ${inc.src_ip}`}
                             >
                               <Unlock size={13} /> Release
@@ -657,7 +689,7 @@ export default function App() {
                             <button
                               className="action-btn danger"
                               style={{ padding: '6px 10px', fontSize: '0.72rem' }}
-                              onClick={() => handleRespond(inc.id)}
+                              onClick={(e) => { e.stopPropagation(); handleRespond(inc.id); }}
                               title={`Block ${inc.src_ip}`}
                             >
                               <Ban size={13} /> Block
@@ -665,7 +697,7 @@ export default function App() {
                           )
                         )}
                         {isAuto && contained && (
-                          <span className="badge" style={{ fontSize: '0.68rem', color: '#00ffc2', border: '1px solid rgba(0,255,194,0.3)' }}>
+                          <span className="badge" style={{ fontSize: '0.68rem', color: '#2ea043', border: '1px solid rgba(46,160,67,0.4)' }}>
                             <Lock size={11} /> Auto-contained
                           </span>
                         )}
@@ -679,6 +711,136 @@ export default function App() {
           </div>
         </div>
       </main>
+
+      {/* Incident detail drill-down */}
+      {detailId !== null && (
+        <div className="modal-overlay" onClick={closeIncident}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="card-title">
+                <AlertTriangle size={18} color="#e5484d" />
+                Incident #{detailId}
+                {detail && <span className="incident-family" style={{ textTransform: 'capitalize' }}>· {detail.family}</span>}
+                {detail && (
+                  <span className={`badge ${detail.status === 'contained' ? 'benign' : 'threat'}`} style={{ marginLeft: 4 }}>
+                    {detail.status}
+                  </span>
+                )}
+              </div>
+              <button className="action-btn secondary icon-only" onClick={closeIncident} title="Close">
+                <X size={15} />
+              </button>
+            </div>
+
+            <div className="modal-body">
+              {detailLoading && <div className="modal-empty">Loading analysis…</div>}
+              {!detailLoading && !detail && <div className="modal-empty">Could not load incident detail.</div>}
+
+              {detail && (
+                <>
+                  {/* Summary */}
+                  <div className="detail-summary">
+                    <div><span>Source IP</span><b style={{ fontFamily: 'var(--font-mono)' }}>{detail.src_ip}</b></div>
+                    <div><span>Max risk</span><b>{Number(detail.max_risk).toFixed(1)}</b></div>
+                    <div><span>Alerts</span><b>{detail.alert_count}</b></div>
+                    <div><span>First seen</span><b>{detail.first_seen?.replace('T', ' ').slice(0, 19)}</b></div>
+                    <div><span>Last seen</span><b>{detail.last_seen?.replace('T', ' ').slice(0, 19)}</b></div>
+                  </div>
+
+                  {/* Decision & response */}
+                  {detail.decisions?.length > 0 && (() => {
+                    const d = detail.decisions[0];
+                    const guards = d.guardrail_results && typeof d.guardrail_results === 'object' ? Object.entries(d.guardrail_results) : [];
+                    return (
+                      <div className="detail-section">
+                        <div className="detail-section-title"><Gauge size={14} /> Decision &amp; Response</div>
+                        <div className="detail-kv">
+                          <div><span>Rule</span><b>{d.rule_id || '—'}</b></div>
+                          <div><span>Tier</span><b>{d.tier}</b></div>
+                          <div><span>Mode</span><b style={{ textTransform: 'uppercase' }}>{d.mode}</b></div>
+                          <div><span>Status</span><b style={{ textTransform: 'uppercase' }}>{d.status}</b></div>
+                          <div><span>Risk score</span><b>{Number(d.risk_score).toFixed(1)}</b></div>
+                          <div><span>Playbook</span><b>{d.playbook_id || '—'}</b></div>
+                        </div>
+                        {guards.length > 0 && (
+                          <div className="guardrails">
+                            {guards.map(([k, v]) => {
+                              const passed = v && typeof v === 'object' ? v.passed : !!v;
+                              return (
+                                <span key={k} className={`badge ${passed ? 'benign' : 'threat'}`}>
+                                  {passed ? <CheckCircle2 size={11} /> : <AlertTriangle size={11} />} {k}
+                                  {v && typeof v === 'object' && v.actual !== undefined ? `: ${Number(v.actual).toFixed(2)}` : ''}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
+                        {d.explanation && (
+                          <div className="detail-explanation">
+                            {typeof d.explanation === 'string' ? d.explanation : JSON.stringify(d.explanation)}
+                          </div>
+                        )}
+                        {d.actions?.length > 0 && (
+                          <div className="detail-actions">
+                            {d.actions.map((a) => (
+                              <div key={a.id} className="detail-action-row">
+                                <span className="badge">{a.action}</span>
+                                <span style={{ color: 'var(--text-muted)' }}>{a.executor}{a.dry_run ? ' · dry-run' : ''}</span>
+                                <span className={`badge ${a.status === 'applied' || a.status === 'executed' ? 'benign' : ''}`}>{a.status}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Detections (alerts) with ML explainability */}
+                  <div className="detail-section">
+                    <div className="detail-section-title"><FileText size={14} /> Detections ({detail.alerts?.length || 0})</div>
+                    {(detail.alerts || []).slice(0, 8).map((a) => {
+                      const probs = a.probabilities && typeof a.probabilities === 'object'
+                        ? Object.entries(a.probabilities).sort((x, y) => y[1] - x[1]) : [];
+                      const ruleBased = (a.model_version || '').startsWith('rate-rule');
+                      return (
+                        <div key={a.id} className="detail-alert">
+                          <div className="detail-alert-head">
+                            <span className={`badge ${a.label?.toLowerCase().includes('benign') ? 'benign' : 'threat'}`}>
+                              {a.label}
+                            </span>
+                            <span className="detail-alert-meta">
+                              conf {fmtConf(a.confidence)} · margin {Number(a.margin || 0).toFixed(2)}
+                            </span>
+                            <span className="detail-alert-src" title="detector">
+                              {ruleBased ? '⚙ rate-rule' : '🧠 ' + (a.model_version || 'model')}
+                            </span>
+                          </div>
+                          {probs.length > 0 ? (
+                            <div className="prob-list">
+                              {probs.map(([cls, p]) => (
+                                <div key={cls} className="prob-row">
+                                  <span className="prob-label">{cls}</span>
+                                  <div className="prob-bar"><div style={{ width: `${(p * 100).toFixed(1)}%` }} /></div>
+                                  <span className="prob-pct">{(p * 100).toFixed(0)}%</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="detail-note">Deterministic rule — no probability distribution.</div>
+                          )}
+                          <div className="detail-alert-foot">
+                            {a.ts?.replace('T', ' ').slice(0, 19)} · {a.src_ip}:{a.src_port} → {a.dst_ip}:{a.dst_port}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Floating Notification Toast */}
       {toastMsg && (
