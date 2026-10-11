@@ -4,7 +4,7 @@ import { LiveTelemetryBanner } from './components/LiveTelemetryBanner';
 import { PlatformBento } from './components/PlatformBento';
 import { SolutionsSection } from './components/SolutionsSection';
 import { Footer } from './components/Footer';
-import { SocConsole } from './components/SocConsole';
+import { ConsoleShell } from './components/console/ConsoleShell';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -318,7 +318,7 @@ export default function App() {
 
       <div className="relative z-10 w-full min-h-screen">
         {activeView === 'console' ? (
-          <SocConsole
+          <ConsoleShell
             onBackToLanding={navigateToLanding}
             apiBase={API_BASE}
             systemHealth={systemHealth}
