@@ -12,8 +12,8 @@ Modes:
            -> 'DoS SYN Flood'
 
 Usage:
-  python3 gen_traffic.py recon  --port 9999 --count 60
-  python3 gen_traffic.py flood  --port 9900 --packets 500
+  python3 attack/gen_traffic.py recon  --port 9999 --count 60
+  python3 attack/gen_traffic.py flood  --port 9900 --packets 500
 """
 import argparse
 import socket

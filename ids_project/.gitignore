@@ -1,2 +1,4 @@
-*.pkl
-model.pkl
+__pycache__/
+events.log
+live_flows.csv
+dataset/*.csv

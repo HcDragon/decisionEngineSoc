@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# testlab/setup_netns.sh  (MASTER PRD Phase 1)
+# defend/setup_netns.sh  (MASTER PRD Phase 1)
 # Create an isolated attacker network namespace connected to the host by a veth
 # pair, simulating the two-machine lab (defender host 10.66.0.10 / attacker
 # 10.66.0.20) on a single Ubuntu box. Requires root.
@@ -16,7 +16,7 @@ cd "$(dirname "$0")"
 source ./lab.env
 
 if [ "$(id -u)" -ne 0 ]; then
-    echo "[-] Must run as root:  sudo testlab/setup_netns.sh" >&2
+    echo "[-] Must run as root:  sudo defend/setup_netns.sh" >&2
     exit 1
 fi
 

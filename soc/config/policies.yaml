@@ -34,6 +34,7 @@ attack_families:
     severity: 0.85
   recon:
     members:
+      - "Recon Scan"
       - "Recon Ping Sweep"
       - "Recon OS Scan"
       - "Recon Host Discovery"

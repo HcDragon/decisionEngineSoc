@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# testlab/stop_testlab.sh  (MASTER PRD Phase 3)
+# defend/stop.sh  (MASTER PRD Phase 3)
 # Stop backend/dashboard (incl. NFStream child procs), FLUSH real SOC_BLOCK nft
 # rules, tear down namespaces, and verify nothing is left. Requires root.
 # ==============================================================================
 set -uo pipefail
 cd "$(dirname "$0")/.."
 # shellcheck disable=SC1091
-source testlab/lab.env
-[ "$(id -u)" -eq 0 ] || { echo "[-] run as root: sudo testlab/stop_testlab.sh" >&2; exit 1; }
+source defend/lab.env
+[ "$(id -u)" -eq 0 ] || { echo "[-] run as root: sudo defend/stop.sh" >&2; exit 1; }
 PY=.venv/bin/python
 
 echo "[1/4] stopping backend + dashboard (and NFStream children)"
-if [ -f testlab/.backend.pid ]; then
-    kill "$(cat testlab/.backend.pid)" 2>/dev/null || true
-    rm -f testlab/.backend.pid
+if [ -f defend/.backend.pid ]; then
+    kill "$(cat defend/.backend.pid)" 2>/dev/null || true
+    rm -f defend/.backend.pid
 fi
 pkill -9 -f "uvicorn.*soc.backend.app.main" 2>/dev/null || true
 pkill -9 -f "soc.backend.app.main"          2>/dev/null || true   # nfstream forked children
@@ -28,7 +28,7 @@ $PY -m soc.backend.app.response.firewall flush 2>/dev/null || \
     { nft flush chain inet soc_lab SOC_BLOCK 2>/dev/null; nft delete table inet soc_lab 2>/dev/null; } || true
 
 echo "[3/4] tearing down namespaces"
-testlab/teardown_netns.sh >/dev/null || true
+defend/teardown_netns.sh >/dev/null || true
 
 echo "[4/4] verification"
 echo "   netns    : $(ip netns list | tr '\n' ' ' || true)"

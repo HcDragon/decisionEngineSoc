@@ -4,3 +4,4 @@ joblib
 matplotlib
 seaborn
 imbalanced-learn
+cicflowmeter   # live packet->flow extraction (victim host, live mode only)

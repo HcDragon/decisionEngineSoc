@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# testlab/acceptance.sh — ONE-COMMAND full acceptance run.
-# Verifies isolation, starts the lab, then runs TWO real attacks from the
-# attacker namespace:
-#   (A) SSH brute-force  -> brute_force -> R-BRUTE(auto) -> REAL nft block ->
-#       attacker ping FAILS -> TTL expiry -> ping RECOVERS.
-#   (B) SYN flood        -> dos_flood  -> R-DOS(recommend) -> detected +
-#       mitigation PROPOSED (policy keeps DoS mitigation analyst-gated).
-# Then tears everything down. Run:  sudo bash testlab/acceptance.sh
+# acceptance.sh — ONE-COMMAND full acceptance run (orchestrator).
+# Verifies isolation, starts the defence lab, then runs TWO real attacks from
+# the attacker namespace via the standalone scenario scripts:
+#   (A) attack/scenarios/brute_force.sh -> brute_force -> R-BRUTE(auto) ->
+#       REAL nft block -> attacker ping FAILS -> TTL expiry -> ping RECOVERS.
+#   (B) attack/scenarios/syn_flood.sh   -> dos_flood  -> R-DOS(recommend) ->
+#       detected + mitigation PROPOSED (policy keeps DoS mitigation gated).
+# Then tears everything down. Run:  sudo bash acceptance.sh
 # ==============================================================================
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")"
 # shellcheck disable=SC1091
-source testlab/lab.env
-[ "$(id -u)" -eq 0 ] || { echo "[-] run with sudo:  sudo bash testlab/acceptance.sh" >&2; exit 1; }
+source defend/lab.env
+[ "$(id -u)" -eq 0 ] || { echo "[-] run with sudo:  sudo bash acceptance.sh" >&2; exit 1; }
 
 export DEFAULT_BLOCK_TTL_S=45
 TTL=$DEFAULT_BLOCK_TTL_S
@@ -31,19 +31,18 @@ echo "[+] sshd: $(ss -ltn 2>/dev/null | grep -q ':22 ' && echo listening || echo
 echo "[+] hping3: $(command -v hping3 >/dev/null && echo present || echo MISSING)"
 
 hr "STEP 2/8  isolation gate"
-testlab/setup_netns.sh >/dev/null
+defend/setup_netns.sh >/dev/null
 echo -n "[check] attacker -> defender : "; ip netns exec "$ATTACKER_NETNS" ping -c2 -W2 "$DEFENDER_LAB_IP" >/dev/null 2>&1 && echo OK || echo FAIL
 echo -n "[check] attacker -> internet : "
 if ip netns exec "$ATTACKER_NETNS" ping -c2 -W2 8.8.8.8 >/dev/null 2>&1; then
-    echo "REACHABLE <-- ISOLATION BROKEN, aborting"; testlab/teardown_netns.sh >/dev/null; exit 1
+    echo "REACHABLE <-- ISOLATION BROKEN, aborting"; defend/teardown_netns.sh >/dev/null; exit 1
 else echo "blocked (correct)"; fi
 
 hr "STEP 3/8  start lab (backend: lab executor + auto, TTL=${TTL}s)"
-testlab/start_testlab.sh || { echo "[-] start failed"; testlab/stop_testlab.sh; exit 1; }
+defend/start.sh || { echo "[-] start failed"; defend/stop.sh; exit 1; }
 
 hr "STEP 4/8  ATTACK A — SSH brute-force from $ATTACKER_LAB_IP"
-printf 'alpha\nbravo\ncharlie\ndelta\necho\nfoxtrot\ngolf\nhotel\n' > /tmp/wl.txt
-ip netns exec "$ATTACKER_NETNS" hydra -l testuser -P /tmp/wl.txt -t 4 ssh://"$DEFENDER_LAB_IP" >/tmp/hydra.log 2>&1 || true
+attack/scenarios/brute_force.sh >/tmp/soc_brute.log 2>&1 || true
 echo "[*] detection + auto-block settling..."; sleep 8
 
 hr "STEP 5/8  RESULT A — incident, decision, REAL nft block"
@@ -67,8 +66,7 @@ ip netns exec "$ATTACKER_NETNS" ping -c3 -W2 "$DEFENDER_LAB_IP" >/dev/null 2>&1 
 
 hr "STEP 7/8  ATTACK B — SYN flood (DoS) from $ATTACKER_LAB_IP"
 if command -v hping3 >/dev/null; then
-    echo "[*] hping3 SYN flood -p 22 (single flow, ~6s)"
-    timeout 6 ip netns exec "$ATTACKER_NETNS" hping3 -S --flood -p 22 -s 5000 -k "$DEFENDER_LAB_IP" >/dev/null 2>&1 || true
+    PORT=22 DURATION=6 attack/scenarios/syn_flood.sh >/dev/null 2>&1 || true
     echo "[*] detection settling..."; sleep 6
     echo "  incidents now:"; incidents
     echo "  (DoS maps to R-DOS = recommend: detected + mitigation PROPOSED, not auto-enforced by policy)"
@@ -78,6 +76,6 @@ fi
 echo -n "[check] audit chain : "; cu $API/api/audit/verify; echo
 
 hr "STEP 8/8  teardown"
-testlab/stop_testlab.sh
+defend/stop.sh
 echo ""
-echo "ACCEPTANCE COMPLETE.  Logs: /tmp/soc_testlab.log  /tmp/hydra.log"
+echo "ACCEPTANCE COMPLETE.  Logs: /tmp/soc_testlab.log  /tmp/soc_brute.log"

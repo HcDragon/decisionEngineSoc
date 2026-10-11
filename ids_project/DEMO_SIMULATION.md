@@ -126,10 +126,13 @@ Tuning knobs in [`simulate.py`](simulate.py):
 - `ROWS_PER_FILE` — how many flows per attack type (raise for a longer feed)
 - `DELAY_SECONDS` — pacing (`0.5` reads nicely on a projector; lower = faster)
 
-> Talking point: the model recognises these **attack families** — DoS floods
-> (SYN/UDP/DNS/ICMP), Recon (ping sweep / OS scan), Dictionary Brute Force,
-> and MITM ARP Spoofing — the same families the Decision Engine scores and
-> maps to playbooks in [`soc/config/policies.yaml`](../soc/config/policies.yaml).
+> Talking point: the model recognises four **network-layer attack families** —
+> DoS SYN Flood, Recon Scan (merged OS scan / ping sweep), Dictionary Brute Force,
+> and MITM ARP Spoofing — plus Benign Traffic (five classes total), the same
+> families the Decision Engine scores and maps to playbooks in
+> [`soc/config/policies.yaml`](../soc/config/policies.yaml). It classifies from
+> 72 TCP-flow features; UDP/DNS/ICMP floods and host-discovery recon were dropped
+> because the training captures held no TCP attack flows for them.
 
 ---
 
@@ -204,27 +207,39 @@ sudo arpspoof -i eth0 -t $SERVER $GATEWAY     # Ctrl-C to stop
 
 ---
 
-## 6. Optional: make Track B show *real* model-classified attacks
+## 6. Track B now runs the model live (ML-only)
 
-If you want live captured packets to be labelled by the model (not just metered),
-wire the classifier into the flow recorder. In
-[`app/monitor/streamer.py`](../soc/backend/app/monitor/streamer.py),
-`_record_native_flow()` already has the model loaded (`self._model`,
-`self._scaler`, `self._encoder`, `self._feature_names`) — build a feature vector
-from the NFStream flow aligned to `self._feature_names`, run
-`self._encoder.inverse_transform(self._model.predict(self._scaler.transform(X)))`,
-and set `threat_label` / `is_threat` / `confidence` from the result.
+Live captured packets **are** labelled by the trained model — this is wired, not
+optional. In [`app/monitor/streamer.py`](../soc/backend/app/monitor/streamer.py),
+`_classify_native()` maps each NFStream flow onto the model's features via
+[`app/monitor/features.py`](../soc/backend/app/monitor/features.py) and runs
+`predict_proba`, threading the full class **probabilities** + top-2 **margin**
+into the decision engine (for the `R-CRIT-AUTO` margin guardrail and the
+explanation panel).
 
-Caveat noted in [`docs/ASSUMPTIONS.md`](../docs/ASSUMPTIONS.md): the training
-dataset has no IP columns and `Src Port` is an influential (capture-artifact)
-feature, so live NFStream features won't line up 1:1 with the model's expected
-columns — expect to map/fill a subset. **If you're short on time before the
-demo, don't attempt this live — rely on Track A for real detection and run
-Track B in emulation mode for the moving dashboard.**
+Two things to know:
 
-Emulation mode (automatic attack labels, no wiring needed): run the backend
-**without** packet-capture privilege (skip the `setcap` step / don't use sudo),
-and the monitor falls back to the labelled emulation stream.
+- **The model was retrained on the 57 NFStream-observable features.** The
+  original CICFlowMeter model leaned ~23% of its weight on TCP initial-window and
+  header-length features NFStream cannot produce; feeding it zeros for those made
+  it blind. `preprocess.py` now drops those columns (`NFSTREAM_UNAVAILABLE`), so
+  the model trains on exactly what it sees live. Held-out accuracy 99.82%.
+- **Detection is ML-only.** The flow-shape heuristic remains **only** as a
+  no-model fallback (when the artifacts are absent, or `SOC_USE_MODEL=0`); its
+  incidents carry no probabilities/margin and are not explainable, so it is never
+  OR'd in alongside the model.
+
+> Because the model learned real attack *shape*, the no-sudo `gen_traffic.py`
+> (built for the old heuristic) no longer raises incidents — the model correctly
+> reads its fake flood (a completed TCP echo connection) as benign. **Real
+> detections need real tools**: run the §4 namespace lab in
+> [`docs/DEMO.md`](../docs/DEMO.md) (`hping3`, `nmap`, `hydra`). This is a
+> stronger result than a demo that quietly still runs on rules.
+
+Emulation mode (automatic attack labels, no capture needed) is still available
+for a moving dashboard with no traffic setup: run the backend **without**
+packet-capture privilege and the monitor falls back to the labelled emulation
+stream.
 
 ---
 

@@ -50,6 +50,12 @@ class FlowRecord(BaseModel):
     is_threat: bool = False
     confidence: float = 0.99
     risk_score: float = 0.0
+    # Full model output, threaded to the decision engine for the margin guardrail
+    # and the explanation panel. Empty for heuristic-fallback flows (no real
+    # probability distribution — see _heuristic_classify).
+    probabilities: Dict[str, float] = Field(default_factory=dict)
+    margin: float = 0.0
+    model_features: Dict[str, float] = Field(default_factory=dict)
 
 
 def _default_iface() -> str:
@@ -127,6 +133,10 @@ class NetworkTrafficMonitor:
     def _try_load_model(self):
         """Attempt to load the pre-trained IDS model for real-time flow classification."""
         if self._model_loaded:
+            return
+        import os
+        if os.getenv("SOC_USE_MODEL", "1").lower() in ("0", "false", "no"):
+            logger.info("SOC_USE_MODEL disabled — live classification uses the heuristic detector.")
             return
         try:
             import joblib
@@ -206,6 +216,11 @@ class NetworkTrafficMonitor:
                     promiscuous_mode=self.config.promiscuous_mode,
                     idle_timeout=self.config.idle_timeout,
                     active_timeout=self.config.active_timeout,
+                    # Needed by the IDS model adapter: populates per-direction
+                    # packet-size (*_ps), inter-arrival (*_piat_ms) and TCP-flag
+                    # (*_syn_packets ...) stats on each flow. Without this they
+                    # are 0 and the model only ever sees packet/byte counts.
+                    statistical_analysis=True,
                 )
                 self.engine_mode = "native_nfstream"
                 for flow in streamer:
@@ -242,7 +257,8 @@ class NetworkTrafficMonitor:
             app = str(getattr(flow, "application_name", f"port_{self.config.target_port}"))
 
             # Best-effort live classification by the IDS model (if artifacts loaded).
-            label, conf, is_threat = self._classify_native(flow)
+            cls = self._classify_native(flow)
+            label, conf, is_threat = cls["label"], cls["confidence"], cls["is_threat"]
 
             rec = FlowRecord(
                 id=f"flow-{int(time.time() * 1000)}-{random.randint(100, 999)}",
@@ -260,6 +276,9 @@ class NetworkTrafficMonitor:
                 is_threat=is_threat,
                 confidence=conf,
                 risk_score=5.0,
+                probabilities=cls.get("probabilities", {}),
+                margin=cls.get("margin", 0.0),
+                model_features=cls.get("features", {}),
             )
             self._append_flow(rec)
         except Exception as err:
@@ -280,19 +299,25 @@ class NetworkTrafficMonitor:
             return self._heuristic_classify(flow)
         try:
             import numpy as np
+            import pandas as pd
+            from soc.backend.app.monitor.features import build_feature_row
 
-            # Build a feature vector aligned to the model's expected columns,
-            # pulling any same-named attribute off the NFStream flow, 0-filling
-            # the rest. Unknown columns stay 0 rather than crashing the capture.
-            row = []
-            for name in self._feature_names:
-                attr = str(name).strip().lower().replace(" ", "_")
-                val = getattr(flow, attr, None)
-                try:
-                    row.append(float(val) if val is not None else 0.0)
-                except (TypeError, ValueError):
-                    row.append(0.0)
-            X = np.array([row], dtype=float)
+            # Map the live NFStream flow onto the model's 72 CIC-style features
+            # (unit-converted; see monitor/features.py). Log coverage once so a
+            # broken adapter is visible instead of silently predicting benign.
+            row, mapped = build_feature_row(flow, self._feature_names)
+            if not getattr(self, "_coverage_logged", False):
+                logger.info(
+                    "IDS model live feature coverage: %d/%d columns populated from "
+                    "NFStream (rest 0-filled: no NFStream equivalent).",
+                    mapped, len(self._feature_names),
+                )
+                self._coverage_logged = True
+
+            # Pass a named DataFrame so the scaler/model see the same feature
+            # names they were fitted with (avoids the sklearn feature-name warning
+            # and guarantees column order).
+            X = pd.DataFrame([row], columns=list(self._feature_names))
             if self._scaler is not None:
                 X = self._scaler.transform(X)
 
@@ -300,12 +325,26 @@ class NetworkTrafficMonitor:
             label = str(self._encoder.inverse_transform(pred)[0]) if self._encoder is not None else str(pred[0])
 
             conf = 0.90
+            probabilities: Dict[str, float] = {}
+            margin = 0.0
             if hasattr(self._model, "predict_proba"):
                 proba = self._model.predict_proba(X)[0]
                 conf = float(np.max(proba))
+                if self._encoder is not None:
+                    probabilities = {
+                        str(c): float(p) for c, p in zip(self._encoder.classes_, proba)
+                    }
+                # Top-2 margin: how decisively the winner beat the runner-up.
+                # Feeds the R-CRIT-AUTO min_margin guardrail in policies.yaml.
+                top2 = sorted(proba, reverse=True)[:2]
+                margin = float(top2[0] - top2[1]) if len(top2) == 2 else float(top2[0])
 
             is_threat = label.strip().lower() not in ("benign", "benign traffic", "normal")
-            return (label, conf, is_threat)
+            return {
+                "label": label, "confidence": conf, "is_threat": is_threat,
+                "probabilities": probabilities, "margin": margin,
+                "features": dict(zip(self._feature_names, row)),
+            }
         except Exception as e:
             logger.debug(f"Live model classification failed, using heuristic: {e}")
             return self._heuristic_classify(flow)
@@ -325,6 +364,16 @@ class NetworkTrafficMonitor:
         attacks (floods, scans, auth brute force) are detectable from flow shape.
         The SOC's correlation + repeat-offender logic aggregates these per source.
         """
+        def h(label: str, conf: float, threat: bool) -> dict:
+            # No probability distribution or margin: the heuristic is a fallback
+            # for when the ML model is absent, and its incidents are deliberately
+            # NOT fed to the margin guardrail / explanation panel (which assume
+            # real model probabilities).
+            return {
+                "label": label, "confidence": conf, "is_threat": threat,
+                "probabilities": {}, "margin": 0.0, "features": {},
+            }
+
         try:
             pkts = int(getattr(flow, "bidirectional_packets", 0) or 0)
             nbytes = int(getattr(flow, "bidirectional_bytes", 0) or 0)
@@ -338,8 +387,8 @@ class NetworkTrafficMonitor:
             #    on page loads. UDP vs SYN(TCP) by protocol.
             if pkts >= 200 and bytes_per_pkt <= 100:
                 if proto == 17:
-                    return ("DoS UDP Flood", 0.80, True)
-                return ("DoS SYN Flood", 0.80, True)
+                    return h("DoS UDP Flood", 0.80, True)
+                return h("DoS SYN Flood", 0.80, True)
 
             # 2) Recon scan probe: a connection with no real payload — a bare
             #    SYN/SYN-ACK/RST exchange, the shape nmap leaves on each probed
@@ -347,17 +396,17 @@ class NetworkTrafficMonitor:
             #    headroom while staying far below any real data flow (a tiny HTTP
             #    GET is already ~12 packets / ~1900 bytes).
             if pkts <= 4 and nbytes <= 300 and dur <= 200.0:
-                return ("Recon OS Scan", 0.62, True)
+                return h("Recon OS Scan", 0.62, True)
 
             # 3) Auth brute force: short repeated sessions against a login service.
             #    Only meaningful when the monitored service is an auth port.
             if dst_port in self._AUTH_PORTS and 3 <= pkts <= 40 and dur <= 3000.0:
-                return ("Dictionary Brute Force", 0.68, True)
+                return h("Dictionary Brute Force", 0.68, True)
 
-            return ("Benign Traffic", 0.95, False)
+            return h("Benign Traffic", 0.95, False)
         except Exception as e:
             logger.debug(f"Heuristic classify fell back to benign: {e}")
-            return ("Benign Traffic", 0.95, False)
+            return h("Benign Traffic", 0.95, False)
 
     def _run_emulation_loop(self):
         """Generate representative flow traffic on target port with attack scenarios."""
@@ -490,6 +539,10 @@ class NetworkTrafficMonitor:
                     dst_port=rec.dst_port,
                     label=rec.threat_label,
                     confidence=rec.confidence,
+                    # Real model outputs feed the margin guardrail and the
+                    # explanation panel; empty for heuristic-fallback flows.
+                    margin=rec.margin,
+                    probabilities=rec.probabilities or None,
                     model_version=f"monitor:{self.engine_mode}",
                     raw_features={
                         "protocol": rec.protocol,
@@ -497,6 +550,8 @@ class NetworkTrafficMonitor:
                         "bidirectional_bytes": rec.bidirectional_bytes,
                         "duration_ms": rec.duration_ms,
                         "application_name": rec.application_name,
+                        # Full 57-feature model input, for on-demand SHAP / audit.
+                        "model_features": rec.model_features or {},
                     },
                 )
                 if result:

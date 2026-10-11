@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# testlab/start_testlab.sh  (MASTER PRD Phase 3, adapted to the NFStream stack)
+# defend/start.sh  (MASTER PRD Phase 3, adapted to the NFStream stack)
 # Bring up the lab: namespaces + backend (real nft executor, auto mode,
 # capturing veth-def). Self-cleans stale processes and waits for readiness
 # with timeouts so it never hangs. Requires root.
@@ -8,9 +8,9 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 # shellcheck disable=SC1091
-source testlab/lab.env
+source defend/lab.env
 
-[ "$(id -u)" -eq 0 ] || { echo "[-] run as root: sudo testlab/start_testlab.sh" >&2; exit 1; }
+[ "$(id -u)" -eq 0 ] || { echo "[-] run as root: sudo defend/start.sh" >&2; exit 1; }
 PY=.venv/bin/python
 [ -x "$PY" ] || { echo "[-] venv missing. Run run_linux.sh first." >&2; exit 1; }
 START_DASHBOARD="${START_DASHBOARD:-0}"   # default: do NOT start dashboard (avoids hangs)
@@ -21,7 +21,7 @@ command -v fuser >/dev/null 2>&1 && fuser -k 8000/tcp 2>/dev/null || true
 sleep 1
 
 echo "[1/5] namespaces"
-testlab/setup_netns.sh >/dev/null
+defend/setup_netns.sh >/dev/null
 echo "      attacker=$ATTACKER_LAB_IP  defender(host)=$DEFENDER_LAB_IP on $LAB_IFACE"
 
 echo "[2/5] database (SQLite, clean seed)"
@@ -32,7 +32,7 @@ echo "[3/5] backend — LAB executor + auto mode, capturing $LAB_IFACE"
 export TESTLAB_MODE=1 SOC_CAPTURE_IFACE="$LAB_IFACE" SOC_EXECUTOR=lab SOC_LAB_MODE=true \
        AUTOMATION_MODE=auto DATABASE_URL="sqlite:///./soc.db"
 $PY -m uvicorn soc.backend.app.main:app --host 0.0.0.0 --port 8000 >/tmp/soc_testlab.log 2>&1 &
-echo $! > testlab/.backend.pid
+echo $! > defend/.backend.pid
 
 # Readiness loop (timeout-bounded — never hang)
 READY=0

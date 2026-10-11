@@ -26,14 +26,14 @@ echo "[*] engine_mode = $MODE"
 echo "[*] TEST 1: recon scan on port 9999"
 curl -s -X POST $API/api/traffic/port -H 'Content-Type: application/json' -d '{"port":9999}' >/dev/null
 sleep 5
-$PY scripts/gen_traffic.py recon --port 9999 --count 80
+$PY attack/gen_traffic.py recon --port 9999 --count 80
 echo "    waiting for flow expiry..."; sleep 4
 
 # ---- Test 2: flood (packet burst to a built-in sink) ------------------------
 echo "[*] TEST 2: dos flood on port 9900"
 curl -s -X POST $API/api/traffic/port -H 'Content-Type: application/json' -d '{"port":9900}' >/dev/null
 sleep 5
-$PY scripts/gen_traffic.py flood --port 9900 --packets 600
+$PY attack/gen_traffic.py flood --port 9900 --packets 600
 echo "    waiting for flow expiry..."; sleep 4
 
 # ---- Results ----------------------------------------------------------------

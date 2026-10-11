@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# testlab/teardown_netns.sh  (MASTER PRD Phase 1)
+# defend/teardown_netns.sh  (MASTER PRD Phase 1)
 # Fully remove the attacker namespace and veth pair. Idempotent: safe to run
 # even if nothing exists. Requires root.
 # ==============================================================================
@@ -11,7 +11,7 @@ cd "$(dirname "$0")"
 source ./lab.env
 
 if [ "$(id -u)" -ne 0 ]; then
-    echo "[-] Must run as root:  sudo testlab/teardown_netns.sh" >&2
+    echo "[-] Must run as root:  sudo defend/teardown_netns.sh" >&2
     exit 1
 fi
 

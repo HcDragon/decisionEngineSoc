@@ -6,8 +6,22 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from imblearn.over_sampling import SMOTE
 
-DATASET_PATH = "dataset/cleaned_ids_dataset (1).csv"
-DROP_COLS = ['Label', 'Multi_Label']
+DATASET_PATH = "dataset/relabeled_ids_dataset.csv"  # built by relabel_dataset.py
+
+# Features NFStream's live capture cannot produce (TCP initial window size, TCP
+# header length, bulk-transfer averages, active/idle split). The SOC runs live
+# detection on NFStream flows (soc/backend/app/monitor/features.py), so training
+# on columns that are always 0 at inference would just mislead the model — drop
+# them here so the trained feature set == what NFStream can actually observe.
+NFSTREAM_UNAVAILABLE = [
+    'Fwd Header Length', 'Bwd Header Length',
+    'Bwd Bytes/Bulk Avg', 'Bwd Packet/Bulk Avg', 'Bwd Bulk Rate Avg',
+    'FWD Init Win Bytes', 'Bwd Init Win Bytes',
+    'Active Mean', 'Active Std', 'Active Max', 'Active Min',
+    'Idle Mean', 'Idle Std', 'Idle Max', 'Idle Min',
+]
+# Src Port is ephemeral: the model memorised the one port each nmap run used.
+DROP_COLS = ['Label', 'Multi_Label', 'Src Port'] + NFSTREAM_UNAVAILABLE
 
 PreprocessResult = namedtuple(
     'PreprocessResult',
@@ -19,16 +33,12 @@ def load_and_preprocess():
     df.columns = df.columns.str.strip()
 
     print(f"Loaded {len(df):,} rows | {df.shape[1]} columns")
+    print(f"\nClass distribution:\n{df['Attack Name'].value_counts()}")
 
     df.drop(columns=[c for c in DROP_COLS if c in df.columns], inplace=True)
     df.replace([float('inf'), float('-inf')], pd.NA, inplace=True)
     df.dropna(inplace=True)
-
-    before = len(df)
     df.drop_duplicates(inplace=True)
-    print(f"Removed {before - len(df):,} duplicate rows | {len(df):,} rows remaining")
-
-    print(f"\nClass distribution:\n{df['Attack Name'].value_counts()}")
 
     constant_cols = [c for c in df.columns if df[c].nunique() <= 1]
     if constant_cols:
