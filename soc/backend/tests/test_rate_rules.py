@@ -50,15 +50,18 @@ def test_flood_by_syn_skew_without_high_pps():
     assert alert is not None and alert["label"] == "DoS SYN Flood"
 
 
-def test_flood_cooldown_suppresses_repeat_alerts():
-    """TC-RATE-FLOOD-COOL: one flood shouldn't alert on every subsequent flow."""
+def test_flood_cooldown_throttles_incident_not_label():
+    """TC-RATE-FLOOD-COOL: a sustained flood is still LABELLED every chunk (so the
+    live table shows it), but the cooldown sets dispatch=False to throttle repeat
+    incidents. After the cooldown expires, dispatch is True again."""
     d = RateDetector()
     first = d.inspect(**_flood_flow(), now=100.0)
     second = d.inspect(**_flood_flow(), now=101.0)   # within cooldown
-    assert first is not None and second is None
-    # after cooldown expires it can fire again
+    assert first is not None and first["dispatch"] is True
+    assert second is not None and second["label"] == "DoS SYN Flood"
+    assert second["dispatch"] is False   # labelled, but no new incident
     later = d.inspect(**_flood_flow(), now=100.0 + d.cooldown_s + 1)
-    assert later is not None
+    assert later is not None and later["dispatch"] is True
 
 
 # --- Rule 2: auth brute force ------------------------------------------------

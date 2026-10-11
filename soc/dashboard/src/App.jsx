@@ -320,6 +320,7 @@ export default function App() {
         {activeView === 'console' ? (
           <SocConsole
             onBackToLanding={navigateToLanding}
+            apiBase={API_BASE}
             systemHealth={systemHealth}
             automationMode={automationMode}
             executorMode={executorMode}

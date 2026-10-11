@@ -15,6 +15,7 @@ from soc.backend.app.db.session import check_db_health, init_db
 from soc.backend.app.monitor.streamer import traffic_monitor
 from soc.backend.app.api.traffic import router as traffic_router
 from soc.backend.app.api.engine import router as engine_router
+from soc.backend.app.api.events import router as events_router
 
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
@@ -89,6 +90,7 @@ def create_app() -> FastAPI:
     # Routers
     app.include_router(traffic_router)
     app.include_router(engine_router)
+    app.include_router(events_router)
 
 
     class HealthResponse(BaseModel):

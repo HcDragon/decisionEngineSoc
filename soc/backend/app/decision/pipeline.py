@@ -44,6 +44,16 @@ from soc.backend.app.scoring.risk import compute_risk
 logger = logging.getLogger("soc.pipeline")
 
 
+def _emit(stage: str, payload: Dict[str, Any]) -> None:
+    """Publish a pipeline-stage event for the live mesh. Never breaks the
+    decision pipeline — any failure (import, serialization, loop) is swallowed."""
+    try:
+        from soc.backend.app.events.bus import bus
+        bus.publish(stage, payload)
+    except Exception:
+        pass
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -269,11 +279,13 @@ def process_flow(
             dst_ip=dst_ip,
             repeat_count=rc,
         )
+        _emit("score", {"incident_hint": src_ip, "risk": score.score, "tier": score.tier})
 
         # --- Correlate into an incident -------------------------------------
         incident = correlate(
             db, policy, src_ip=src_ip, family=family, ts=ts, risk_score=score.score
         )
+        _emit("correlate", {"incident_id": incident.id, "family": family})
 
         # --- Persist the alert ----------------------------------------------
         alert = Alert(
@@ -294,6 +306,7 @@ def process_flow(
         )
         db.add(alert)
         db.flush()
+        _emit("alert", {"alert_id": alert.id, "incident_id": incident.id, "label": label})
 
         # --- Rule evaluation -------------------------------------------------
         match = evaluate_rules(
@@ -307,6 +320,7 @@ def process_flow(
         )
         eff_mode = _effective_mode(match.mode, settings.AUTOMATION_MODE)
         status = _MODE_TO_STATUS.get(eff_mode, DecisionStatus.MONITORED)
+        _emit("policy", {"rule_id": match.rule_id, "mode": eff_mode, "playbook": match.playbook})
 
         decision = Decision(
             incident_id=incident.id,
@@ -331,6 +345,7 @@ def process_flow(
         )
         db.add(decision)
         db.flush()
+        _emit("decision", {"decision_id": decision.id, "status": status.value})
 
         # --- Apply (record only) --------------------------------------------
         # Execute = auto mode. Recommend/monitor only record proposed steps.
@@ -346,6 +361,7 @@ def process_flow(
                 execute=execute,
                 executor=settings.SOC_EXECUTOR,
             )
+        _emit("playbook", {"incident_id": incident.id, "actions": action_summary})
 
         # --- Audit (hash-chained) -------------------------------------------
         append_audit(
@@ -366,6 +382,7 @@ def process_flow(
                 "policy_hash": policy.policy_hash,
             },
         )
+        _emit("audit", {"incident_id": incident.id})
 
         db.commit()
         return {

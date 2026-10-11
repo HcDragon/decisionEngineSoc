@@ -101,6 +101,7 @@ class RateDetector:
             "margin": conf,
             "detector": f"rate-rule:{kind}",
             "reason": reason,
+            "dispatch": True,  # whether to raise/refresh an incident (cooldown-gated)
         }
 
     # -- main -----------------------------------------------------------------
@@ -135,14 +136,21 @@ class RateDetector:
             pps_trigger = packets >= self.flood_min_packets and pps >= self.flood_pps
             syn_skew = syn >= self.flood_syn and syn > 3 * max(ack, 1)
             if pps_trigger or syn_skew:
+                # Flood detection is STATELESS: every matching flow is labelled a
+                # flood (so the live table shows it, not the ML "benign" verdict).
+                # The cooldown only throttles INCIDENT raising — `dispatch` is
+                # False while cooling, so repeat flood chunks are shown but don't
+                # spam new incidents.
                 fkey = f"flood:{src_ip}->{dst_ip}"
-                if not self._cooling(fkey, now):
+                cooling = self._cooling(fkey, now)
+                if not cooling:
                     self._arm_cooldown(fkey, now)
-                    return self._alert(
-                        "DoS SYN Flood", "flood", 0.99,
-                        f"{int(pps)} pkts/s, {syn} SYN (ack={ack}) {src_ip}->{dst_ip}",
-                    )
-                return None  # already alerted this flood recently
+                a = self._alert(
+                    "DoS SYN Flood", "flood", 0.99,
+                    f"{int(pps)} pkts/s, {syn} SYN (ack={ack}) {src_ip}->{dst_ip}",
+                )
+                a["dispatch"] = not cooling
+                return a
 
             # --- Rule 2: auth brute force ------------------------------------
             # Many short-lived flows from one source to the same auth port.
@@ -156,13 +164,16 @@ class RateDetector:
                     dq.popleft()
                 if len(dq) >= self.brute_count:
                     ckey = f"brute:{src_ip}:{dst_port}"
-                    if not self._cooling(ckey, now):
+                    cooling = self._cooling(ckey, now)
+                    if not cooling:
                         self._arm_cooldown(ckey, now)
-                        return self._alert(
-                            "Dictionary Brute Force", "bruteforce", 0.95,
-                            f"{len(dq)} short flows in {self.brute_window_s:.0f}s "
-                            f"{src_ip}->:{dst_port}",
-                        )
+                    a = self._alert(
+                        "Dictionary Brute Force", "bruteforce", 0.95,
+                        f"{len(dq)} short flows in {self.brute_window_s:.0f}s "
+                        f"{src_ip}->:{dst_port}",
+                    )
+                    a["dispatch"] = not cooling
+                    return a
         return None
 
     def _prune(self, now: float) -> None:

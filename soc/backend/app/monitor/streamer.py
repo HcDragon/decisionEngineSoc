@@ -16,6 +16,15 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger("soc.monitor")
 
+
+def _emit(stage: str, payload: dict) -> None:
+    """Publish a live-mesh event. Never breaks the capture loop."""
+    try:
+        from soc.backend.app.events.bus import bus
+        bus.publish(stage, payload)
+    except Exception:
+        pass
+
 # OS Platform Detection
 SYSTEM_OS = platform.system()
 IS_MACOS = SYSTEM_OS == "Darwin"
@@ -59,6 +68,10 @@ class FlowRecord(BaseModel):
     # Provenance of the verdict: "monitor:<engine>" for ML, "rate-rule:*" for the
     # cross-flow rate detector. Surfaced as model_version on the alert.
     detector: str = ""
+    # Whether this flow should be dispatched to the decision engine. False for
+    # cooled-down rate-rule flows: still labelled/shown as a threat, but no new
+    # incident is raised (cooldown throttles incident spam, not the display).
+    dispatch: bool = True
 
 
 def _default_iface() -> str:
@@ -138,6 +151,16 @@ class NetworkTrafficMonitor:
         from soc.backend.app.monitor.rate_rules import RateDetector
         self._rate_detector = RateDetector()
 
+        # The protected host (BPF capture target). Its own responses (e.g. SYN-ACK
+        # replies to a flood) are high-rate but are NOT an attack FROM it, so the
+        # rate rule is not applied to flows sourced by it.
+        import os as _os
+        try:
+            from soc.backend.app.config import settings as _s
+            self._capture_target = (_s.SOC_CAPTURE_TARGET or "").strip() or (_os.getenv("DEFENDER_LAB_IP") or "").strip()
+        except Exception:
+            self._capture_target = (_os.getenv("DEFENDER_LAB_IP") or "").strip()
+
     def _try_load_model(self):
         """Attempt to load the pre-trained IDS model for real-time flow classification."""
         if self._model_loaded:
@@ -199,12 +222,44 @@ class NetworkTrafficMonitor:
         if restart:
             self.start(port)
 
+    def _build_bpf(self) -> str:
+        """Build the libpcap BPF filter for native capture.
+
+        A bare ``port N`` filter matches only TCP/UDP, so ICMP never appears and
+        single-port capture drops UDP floods / scans aimed elsewhere. Preference:
+          1. ``host <target>`` — captures TCP, UDP AND ICMP to the defender
+             (SOC_CAPTURE_TARGET, else the DEFENDER_LAB_IP env var).
+          2. legacy ``port <target_port>`` when SOC_CAPTURE_PORT_ONLY is set.
+          3. ``port <target_port> or icmp or udp`` fallback so ICMP/UDP are no
+             longer excluded when no host is configured.
+        """
+        import os
+        target, port_only = "", False
+        try:
+            from soc.backend.app.config import settings
+            target = (settings.SOC_CAPTURE_TARGET or "").strip()
+            port_only = bool(settings.SOC_CAPTURE_PORT_ONLY)
+        except Exception:
+            pass
+        if not target:
+            target = (os.getenv("DEFENDER_LAB_IP") or "").strip()
+        port = self.config.target_port
+        if port_only:
+            bpf = f"port {port}"
+        elif target:
+            bpf = f"host {target}"
+        else:
+            bpf = f"port {port} or icmp or udp"
+        logger.info("NFStream BPF filter: '%s' (target=%s, port_only=%s, port=%s)",
+                    bpf, target or "-", port_only, port)
+        return bpf
+
     def _run_loop(self):
         """Main monitoring loop."""
         # Try native capture first if NFStream is imported
         if self.has_native and NFStreamer is not None:
             try:
-                bpf = f"port {self.config.target_port}"
+                bpf = self._build_bpf()
                 source_iface = self.config.interface
                 if source_iface == "any" or not source_iface:
                     if IS_MACOS:
@@ -258,7 +313,8 @@ class NetworkTrafficMonitor:
     def _record_native_flow(self, flow: Any):
         """Record flow data from native NFStreamer flow object."""
         try:
-            proto = "TCP" if getattr(flow, "protocol", 6) == 6 else ("UDP" if getattr(flow, "protocol", 17) == 17 else "OTHER")
+            proto_num = int(getattr(flow, "protocol", 6) or 6)
+            proto = {6: "TCP", 17: "UDP", 1: "ICMP"}.get(proto_num, "OTHER")
             pkts = int(getattr(flow, "bidirectional_packets", 1))
             bytes_len = int(getattr(flow, "bidirectional_bytes", 64))
             dur = float(getattr(flow, "bidirectional_duration_ms", 10.0))
@@ -269,12 +325,16 @@ class NetworkTrafficMonitor:
             dst_ip = str(getattr(flow, "dst_ip", "10.0.0.1"))
             dst_port = int(getattr(flow, "dst_port", self.config.target_port))
 
+            # Live mesh: a packet/flow was just captured (before classification).
+            _emit("capture", {"src_ip": src_ip, "dst_ip": dst_ip, "proto": proto, "packets": pkts})
+
             # Best-effort live classification by the IDS model (if artifacts loaded).
             cls = self._classify_native(flow)
             label, conf, is_threat = cls["label"], cls["confidence"], cls["is_threat"]
             probabilities = cls.get("probabilities", {})
             margin = cls.get("margin", 0.0)
             detector = f"monitor:{self.engine_mode}"
+            _emit("detect_ml", {"label": label, "confidence": conf, "is_threat": is_threat})
 
             # Cross-flow rate layer: volumetric flood + auth brute force. Runs
             # independently of the ML verdict and OVERRIDES it when it fires —
@@ -288,10 +348,17 @@ class NetworkTrafficMonitor:
                 ack=int(getattr(flow, "bidirectional_ack_packets", 0) or 0),
                 duration_ms=dur,
             )
-            if rate is not None:
+            # The protected host's own responses are high-rate but not an attack
+            # FROM it — never let the rate rule flag the capture target as a source.
+            dispatch = True
+            if rate is not None and src_ip != self._capture_target:
                 label, conf, is_threat = rate["label"], rate["confidence"], True
                 probabilities, margin, detector = rate["probabilities"], rate["margin"], rate["detector"]
-                logger.info("Rate rule fired [%s]: %s", rate["detector"], rate["reason"])
+                dispatch = rate.get("dispatch", True)
+                logger.info("Rate rule fired [%s]%s: %s", rate["detector"],
+                            "" if dispatch else " (cooldown — labelled, not re-dispatched)", rate["reason"])
+                if dispatch:
+                    _emit("detect_rate_rule", {"rule": rate["detector"], "src_ip": src_ip, "label": label})
 
             rec = FlowRecord(
                 id=f"flow-{int(time.time() * 1000)}-{random.randint(100, 999)}",
@@ -313,6 +380,7 @@ class NetworkTrafficMonitor:
                 margin=margin,
                 model_features=cls.get("features", {}),
                 detector=detector,
+                dispatch=dispatch,
             )
             self._append_flow(rec)
         except Exception as err:
@@ -422,6 +490,8 @@ class NetworkTrafficMonitor:
             if pkts >= 200 and bytes_per_pkt <= 100:
                 if proto == 17:
                     return h("DoS UDP Flood", 0.80, True)
+                if proto == 1:
+                    return h("DoS ICMP Flood", 0.80, True)
                 return h("DoS SYN Flood", 0.80, True)
 
             # 2) Recon scan probe: a connection with no real payload — a bare
@@ -555,6 +625,10 @@ class NetworkTrafficMonitor:
         skipped cheaply before a DB session is opened.
         """
         if rec.threat_label == "Benign Traffic" and not rec.is_threat:
+            return
+        # Cooled-down rate-rule flows are shown/labelled but must not raise a new
+        # incident (cooldown throttles incident spam during a sustained attack).
+        if not rec.dispatch:
             return
         try:
             from soc.backend.app.db.session import SessionLocal

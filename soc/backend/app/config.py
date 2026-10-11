@@ -49,6 +49,15 @@ class Settings(BaseSettings):
     # interfaces; set to e.g. "veth-def" for the namespace test lab.
     SOC_CAPTURE_IFACE: str = Field(default="any")
 
+    # Capture target host for the BPF filter. When set, the live monitor filters
+    # by `host <ip>` so TCP, UDP AND ICMP to the defender are captured (a bare
+    # `port` filter excludes ICMP entirely). Falls back to the DEFENDER_LAB_IP
+    # env var, then to a protocol-inclusive port filter. Set to the lab defender
+    # (10.66.0.10) for the namespace lab.
+    SOC_CAPTURE_TARGET: str = Field(default="")
+    # Force the legacy single-port BPF (`port <target_port>`), TCP/UDP only.
+    SOC_CAPTURE_PORT_ONLY: bool = Field(default=False)
+
     # Safety Guardrails
     SOC_EXECUTOR: Literal["dry_run", "simulated", "lab"] = Field(default="dry_run")
     SOC_LAB_MODE: bool = Field(default=False)

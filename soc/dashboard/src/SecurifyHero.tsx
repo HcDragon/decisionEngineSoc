@@ -214,7 +214,7 @@ export const SecurifyHero: React.FC<SecurifyHeroProps> = ({
 
         {/* Main headline */}
         <h1
-          className="font-['BubbledotICG-FinePos','Geist_Pixel_Circle',monospace] text-[44px] sm:text-[62px] md:text-[80px] lg:text-[88px] leading-[1.0] sm:leading-[1.05] tracking-[-0.05em] uppercase m-0"
+          className="font-['Readex_Pro',sans-serif] font-bold text-[44px] sm:text-[62px] md:text-[80px] lg:text-[88px] leading-[1.0] sm:leading-[1.05] tracking-[-0.05em] uppercase m-0"
           style={{ color: '#f5f0eb' }}
         >
           <span
@@ -312,7 +312,7 @@ export const SecurifyHero: React.FC<SecurifyHeroProps> = ({
         <div className="flex flex-col items-center">
           <div className="flex items-baseline justify-center gap-1">
             <span
-              className="font-['BubbledotICG-FinePos','Geist_Pixel_Circle',monospace] text-[22px] sm:text-[28px] leading-none"
+              className="font-['JetBrains_Mono',monospace] text-[22px] sm:text-[28px] leading-none"
               style={{ color: '#e8a07a' }}
             >
               &lt;
@@ -342,7 +342,7 @@ export const SecurifyHero: React.FC<SecurifyHeroProps> = ({
         <div className="flex flex-col items-center">
           <div className="flex items-baseline justify-center gap-1">
             <span
-              className="font-['BubbledotICG-FinePos','Geist_Pixel_Circle',monospace] text-[22px] sm:text-[28px] leading-none"
+              className="font-['JetBrains_Mono',monospace] text-[22px] sm:text-[28px] leading-none"
               style={{ color: '#e8a07a' }}
             >
               *
@@ -363,7 +363,7 @@ export const SecurifyHero: React.FC<SecurifyHeroProps> = ({
               {counts.context.toFixed(1)}M
             </span>
             <span
-              className="font-['BubbledotICG-FinePos','Geist_Pixel_Circle',monospace] text-[22px] sm:text-[28px] leading-none"
+              className="font-['JetBrains_Mono',monospace] text-[22px] sm:text-[28px] leading-none"
               style={{ color: '#e8a07a' }}
             >
               #

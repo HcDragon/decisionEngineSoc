@@ -17,9 +17,11 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import { IncidentDetailModal } from './IncidentDetailModal';
+import { PipelineMesh } from './PipelineMesh';
 
 interface SocConsoleProps {
   onBackToLanding: () => void;
+  apiBase: string;
   systemHealth: any;
   automationMode: string;
   executorMode: string;
@@ -48,6 +50,7 @@ interface SocConsoleProps {
 
 export const SocConsole: React.FC<SocConsoleProps> = ({
   onBackToLanding,
+  apiBase,
   systemHealth,
   automationMode,
   executorMode,
@@ -90,7 +93,7 @@ export const SocConsole: React.FC<SocConsoleProps> = ({
 
   // Filter flows
   const displayedFlows = threatOnly
-    ? flows.filter((f) => f.threat || f.is_threat || (f.label && !f.label.toLowerCase().includes('benign')))
+    ? flows.filter((f) => f.is_threat || f.threat || ((f.threat_label || f.label) && !(f.threat_label || f.label).toLowerCase().includes('benign')))
     : flows;
 
   return (
@@ -239,6 +242,9 @@ export const SocConsole: React.FC<SocConsoleProps> = ({
             </span>
           </div>
         </section>
+
+        {/* Live Pipeline Mesh — real-time SSE-driven architecture view (additive) */}
+        <PipelineMesh apiBase={apiBase} />
 
         {/* Posture Banner when in Manual Mode */}
         {isManual && (
@@ -564,7 +570,9 @@ export const SocConsole: React.FC<SocConsoleProps> = ({
                   </tr>
                 )}
                 {displayedFlows.slice(0, 15).map((f: any, idx: number) => {
-                  const isThreatFlow = f.threat || (f.label && !f.label.toLowerCase().includes('benign'));
+                  // Backend sends `is_threat` / `threat_label` (old `threat`/`label` kept as fallback).
+                  const flowLabel = f.threat_label || f.label || '';
+                  const isThreatFlow = f.is_threat || f.threat || (flowLabel !== '' && !flowLabel.toLowerCase().includes('benign'));
                   return (
                     <tr
                       key={idx}
@@ -593,7 +601,7 @@ export const SocConsole: React.FC<SocConsoleProps> = ({
                               : 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
                           }`}
                         >
-                          {f.label || (isThreatFlow ? 'THREAT' : 'BENIGN')}
+                          {flowLabel || (isThreatFlow ? 'THREAT' : 'BENIGN')}
                         </span>
                       </td>
                       <td className="py-3">
