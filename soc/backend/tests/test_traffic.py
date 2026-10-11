@@ -41,12 +41,10 @@ def test_traffic_flows_endpoint():
         assert isinstance(flows, list)
 
 
-def test_dashboard_overview():
-    app = create_app()
-    with TestClient(app) as client:
-        res = client.get("/api/dashboard/overview")
-        assert res.status_code == 200
-        data = res.json()
-        assert "system" in data
-        assert "stats" in data
-        assert "traffic" in data
+def test_dashboard_overview(client):
+    res = client.get("/api/dashboard/overview")
+    assert res.status_code == 200
+    data = res.json()
+    assert "system" in data
+    assert "stats" in data
+    assert "traffic" in data
