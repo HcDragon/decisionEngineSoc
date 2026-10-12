@@ -7,13 +7,22 @@ heuristic detector, without needing nmap/hping3/root. Targets the host's primary
 non-loopback IP by default (loopback 127.0.0.1 is allowlisted and suppressed).
 
 Modes:
-  recon  : many short TCP connects to a CLOSED port  -> 'Recon OS Scan'
-  flood  : one connection pushing a burst of tiny packets to a built-in sink
-           -> 'DoS SYN Flood'
+  recon    : many short TCP connects to a CLOSED port  -> 'Recon OS Scan'
+  flood    : one TCP connection pushing a burst of tiny packets to a built-in
+             sink -> 'DoS SYN Flood' (dos_flood)
+  udpflood : one UDP socket firing a high-rate burst of tiny datagrams at a
+             port -> dos_flood (trips the rate-rule pps branch). Used by the
+             UDP-flood and DNS-flood scenarios; needs no hping3/root.
+  brute    : many short-lived TCP connects to an AUTH port (22/21/23/3389/...)
+             -> 'Dictionary Brute Force' (brute_force). Each connect is its own
+             2-3 packet flow; >=5 within the detector's window trip the rule.
+             Needs no hydra -- the signal is the burst of short auth flows.
 
 Usage:
-  python3 attack/gen_traffic.py recon  --port 9999 --count 60
-  python3 attack/gen_traffic.py flood  --port 9900 --packets 500
+  python3 attack/gen_traffic.py recon     --port 9999 --count 60
+  python3 attack/gen_traffic.py flood     --port 9900 --packets 500
+  python3 attack/gen_traffic.py udpflood  --port 53   --packets 20000
+  python3 attack/gen_traffic.py brute     --port 22   --count 16
 """
 import argparse
 import socket
@@ -119,20 +128,88 @@ def run_flood(target: str, port: int, packets: int, duration: float = 7.0) -> No
     print(f"[flood] pushed {sent} tiny packets over one connection to {target}:{port} (~{duration:.0f}s)")
 
 
+def run_udpflood(target: str, port: int, packets: int, duration: float = 6.0) -> None:
+    """One connected UDP socket firing many tiny datagrams at `target:port`.
+
+    A connected UDP socket keeps a single stable ephemeral source port, so every
+    datagram belongs to ONE 5-tuple flow -- NFStream aggregates them into a
+    single high-packet-count flow that trips the rate-rule flood branch
+    (packets >= SOC_FLOOD_MIN_PKTS and pps >= SOC_FLOOD_PPS). Spread over
+    `duration` so the flow reliably spans the live capture window while keeping
+    the per-second rate well above the pps threshold (default needs >1000 pps)."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.connect((target, port))        # fixes the source port -> one flow
+    sent = 0
+    end = time.time() + duration
+    # Pace in small batches so the burst spans `duration` instead of finishing
+    # in a sub-second blip (which can miss NFStream's warm-up), yet still pushes
+    # thousands of packets/sec.
+    batch = max(1, packets // max(1, int(duration * 200)))
+    while sent < packets or time.time() < end:
+        for _ in range(batch):
+            try:
+                s.send(b"x")         # 1-byte datagram -> tiny packet
+                sent += 1
+            except OSError:
+                break
+        time.sleep(0.005)
+        if sent >= packets and time.time() >= end:
+            break
+    s.close()
+    rate = sent / duration if duration else sent
+    print(f"[udpflood] pushed {sent} UDP datagrams to {target}:{port} "
+          f"over ~{duration:.0f}s (~{int(rate)} pkts/s)")
+
+
+def run_brute(target: str, port: int, count: int, duration: float = 7.0) -> None:
+    """Many short-lived TCP connects to an AUTH port, one flow each.
+
+    The rate detector flags brute force on >=5 short flows from one source to
+    the same auth port within its window (default 10s). Each connect here -- it
+    completes the handshake if the port is open, or is refused if closed --
+    is an individual 2-3 packet flow, so a burst of `count` of them trips
+    'Dictionary Brute Force' without hydra. Spread across `duration` so the
+    flows land inside one detector window and the live capture."""
+    done = 0
+    gap = max(0.01, duration / max(1, count))
+    for _ in range(count):
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(0.4)
+        try:
+            s.connect((target, port))
+            # Minimal auth-shaped exchange so open-port flows stay short.
+            try:
+                s.sendall(b"USER admin\r\n")
+                s.recv(32)
+            except OSError:
+                pass
+            s.close()
+        except (ConnectionRefusedError, OSError):
+            pass
+        done += 1
+        time.sleep(gap)
+    print(f"[brute] made {done} short auth connects to {target}:{port} "
+          f"over ~{duration:.0f}s")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=["recon", "flood"])
+    ap.add_argument("mode", choices=["recon", "flood", "udpflood", "brute"])
     ap.add_argument("--target", default=None, help="target IP (default: primary non-loopback IP)")
     ap.add_argument("--port", type=int, required=True)
-    ap.add_argument("--count", type=int, default=60, help="recon: number of connect probes")
-    ap.add_argument("--packets", type=int, default=500, help="flood: tiny packets to send")
+    ap.add_argument("--count", type=int, default=60, help="recon/brute: number of probes/connects")
+    ap.add_argument("--packets", type=int, default=500, help="flood/udpflood: tiny packets to send")
     args = ap.parse_args()
     target = args.target or primary_ip()
     print(f"[gen] mode={args.mode} target={target} port={args.port}")
     if args.mode == "recon":
         run_recon(target, args.port, args.count)
-    else:
+    elif args.mode == "flood":
         run_flood(target, args.port, args.packets)
+    elif args.mode == "udpflood":
+        run_udpflood(target, args.port, args.packets)
+    else:
+        run_brute(target, args.port, args.count)
     return 0
 
 
