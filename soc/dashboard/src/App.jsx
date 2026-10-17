@@ -1,10 +1,15 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
+import gsap from 'gsap';
+import { ScrollToPlugin } from 'gsap/ScrollToPlugin';
 import { SecurifyHero } from './SecurifyHero';
 import { LiveTelemetryBanner } from './components/LiveTelemetryBanner';
 import { PlatformBento } from './components/PlatformBento';
 import { SolutionsSection } from './components/SolutionsSection';
 import { Footer } from './components/Footer';
 import { ConsoleShell } from './components/console/ConsoleShell';
+
+// Register GSAP smooth scroll plugin
+gsap.registerPlugin(ScrollToPlugin);
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -16,6 +21,63 @@ export default function App() {
     }
     return 'landing';
   });
+
+  // Dark / Light Theme state (Dark Mode by default)
+  const [theme, setTheme] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('RASHOMON-theme') || 'dark';
+    }
+    return 'dark';
+  });
+
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      if (theme === 'light') {
+        document.documentElement.classList.add('light');
+        document.body.classList.add('light');
+      } else {
+        document.documentElement.classList.remove('light');
+        document.body.classList.remove('light');
+      }
+      localStorage.setItem('RASHOMON-theme', theme);
+    }
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
+  };
+
+  // Setup GSAP Smooth Scroll globally
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.__gsapScrollTo = (target) => {
+        gsap.to(window, {
+          duration: 1.15,
+          scrollTo: typeof target === 'number' ? target : { y: target, offsetY: 24 },
+          ease: 'power3.out',
+        });
+      };
+
+      const handleAnchorClick = (e) => {
+        const anchor = e.target.closest('a[href^="#"]');
+        if (!anchor) return;
+        const href = anchor.getAttribute('href');
+        if (!href || href === '#console') return; // Route to console
+        e.preventDefault();
+        if (href === '#' || href === '') {
+          window.__gsapScrollTo(0);
+        } else {
+          const targetEl = document.querySelector(href);
+          if (targetEl) {
+            window.__gsapScrollTo(targetEl);
+          }
+        }
+      };
+
+      document.addEventListener('click', handleAnchorClick);
+      return () => document.removeEventListener('click', handleAnchorClick);
+    }
+  }, []);
 
   useEffect(() => {
     const handleHash = () => {
@@ -57,7 +119,7 @@ export default function App() {
   const [overview, setOverview] = useState(null);
   const [isLivePolling, setIsLivePolling] = useState(true);
 
-  // Incident detail drill-down (click a row in Active SOC Incidents)
+  // Incident detail drill-down
   const [detailId, setDetailId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -70,7 +132,7 @@ export default function App() {
       const res = await fetch(`${API_BASE}/api/incidents/${id}`);
       if (res.ok) setDetail(await res.json());
     } catch {
-      /* ignore — modal shows a load error state */
+      /* ignore - modal shows a load error state */
     } finally {
       setDetailLoading(false);
     }
@@ -285,19 +347,29 @@ export default function App() {
   const navigateToConsole = () => {
     window.location.hash = '#console';
     setActiveView('console');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (window.__gsapScrollTo) {
+      window.__gsapScrollTo(0);
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   const navigateToLanding = () => {
     window.location.hash = '#';
     setActiveView('landing');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (window.__gsapScrollTo) {
+      window.__gsapScrollTo(0);
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   return (
-    <div className="min-h-screen text-white antialiased font-sans relative" style={{ background: '#0d0b0d' }}>
-
-      {/* ── Global Fixed Background Image — consistent across ALL views and scroll ── */}
+    <div
+      className={`min-h-screen antialiased font-sans relative transition-colors duration-300 ${theme === 'light' ? 'text-[#141113]' : 'text-white'}`}
+      style={{ background: 'var(--bg-app)' }}
+    >
+      {/* ⛩️ Global Fixed Background Image - consistent across ALL views and scroll ⛩️ */}
       <div
         className="fixed inset-0 w-full h-full pointer-events-none z-0"
         style={{
@@ -307,11 +379,14 @@ export default function App() {
           backgroundRepeat: 'no-repeat',
         }}
       >
-        {/* Overlay: darkens just enough for text legibility while letting image breathe */}
+        {/* Overlay: adapts gracefully between Dark Sumi mode and Light Washi mode */}
         <div
-          className="absolute inset-0"
+          className="absolute inset-0 transition-colors duration-500"
           style={{
-            background: 'linear-gradient(to bottom, rgba(13,11,13,0.38) 0%, rgba(13,11,13,0.22) 45%, rgba(13,11,13,0.52) 100%)',
+            background:
+              theme === 'light'
+                ? 'linear-gradient(to bottom, rgba(246,241,232,0.52) 0%, rgba(246,241,232,0.24) 45%, rgba(246,241,232,0.68) 100%)'
+                : 'linear-gradient(to bottom, rgba(13,11,13,0.40) 0%, rgba(13,11,13,0.22) 45%, rgba(13,11,13,0.55) 100%)',
           }}
         />
       </div>
@@ -348,39 +423,36 @@ export default function App() {
           />
         ) : (
           <div className="flex flex-col w-full">
-            {/* Hero — full-screen torii gate image (background managed inside SecurifyHero) */}
+            {/* Hero - full-screen torii gate with DecryptedText RASHOMON and 2 Nav Buttons + SlingButton + Theme Switch */}
             <SecurifyHero
               onGetStarted={navigateToConsole}
               onOpenConsole={navigateToConsole}
+              theme={theme}
+              onToggleTheme={toggleTheme}
             />
 
-            {/* Below-hero sections — transparent, global bg image shows through */}
-              {/* Real-time Telemetry Status Ticker */}
-              <LiveTelemetryBanner
-                systemHealth={systemHealth}
-                trafficStats={trafficStats}
-                overview={overview}
-                automationMode={automationMode}
-                onOpenConsole={navigateToConsole}
-              />
+            {/* Below-hero sections */}
+            <LiveTelemetryBanner
+              systemHealth={systemHealth}
+              trafficStats={trafficStats}
+              overview={overview}
+              automationMode={automationMode}
+              onOpenConsole={navigateToConsole}
+            />
 
-              {/* Autonomous Architecture Bento Grid */}
-              <PlatformBento onOpenConsole={navigateToConsole} />
+            <PlatformBento onOpenConsole={navigateToConsole} />
 
-              {/* Threat Solutions & Use Cases */}
-              <SolutionsSection onOpenConsole={navigateToConsole} />
+            <SolutionsSection onOpenConsole={navigateToConsole} />
 
-              {/* SaaS Footer */}
-              <Footer onOpenConsole={navigateToConsole} />
+            <Footer onOpenConsole={navigateToConsole} />
           </div>
         )}
       </div>
 
       {/* Floating Notification Toast */}
       {toastMsg && (
-        <div className="fixed bottom-6 right-6 z-50 border text-white px-5 py-3 rounded-2xl shadow-2xl text-xs font-mono flex items-center gap-3 backdrop-blur-xl"
-          style={{ background: 'rgba(20,18,22,0.92)', borderColor: 'rgba(232,160,122,0.3)' }}>
-          <span className="h-2 w-2 rounded-full animate-ping" style={{ background: '#e8a07a' }} />
+        <div className="fixed bottom-6 right-6 z-50 bg-[#faf6f0] text-[#0d0d11] border-[2.5px] border-[#0d0d11] shadow-[4px_4px_0px_#0d0d11] px-5 py-3 rounded-xl text-xs font-mono font-bold flex items-center gap-3">
+          <span className="h-2.5 w-2.5 rounded-full bg-[#e24a2b] animate-ping" />
           <span>{toastMsg}</span>
         </div>
       )}

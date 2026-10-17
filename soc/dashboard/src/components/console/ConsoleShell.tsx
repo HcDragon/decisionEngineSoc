@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import {
   LayoutDashboard, ShieldAlert, Siren, Network, Server, BookOpen,
   FileBarChart, ScrollText, Activity, Settings as SettingsIcon,
@@ -57,63 +57,90 @@ export const ConsoleShell: React.FC<any> = (ctx) => {
   };
 
   return (
-    // Transparent root so the landing background image (fixed in App.jsx) shows
-    // through; surfaces are frosted-translucent for readability over it.
-    <div className="min-h-screen w-full flex">
-      {/* Sidebar */}
-      <aside className="w-[220px] shrink-0 border-r border-[var(--border)] bg-[rgba(16,21,30,0.72)] backdrop-blur-xl flex flex-col sticky top-0 h-screen">
-        <div className="px-4 h-14 flex items-center gap-2.5 border-b border-[var(--border)]">
-          <div className="grid place-items-center h-8 w-8 rounded-md bg-[var(--accent-soft)] border border-[var(--accent)]/40">
-            <ShieldAlert size={17} className="text-[var(--accent)]" />
+    <div className="min-h-screen w-full flex font-sans">
+      {/* Neobrutalist Sidebar */}
+      <aside className="w-[230px] shrink-0 border-r-[3px] border-[#0d0d11] bg-[rgba(26,21,24,0.96)] flex flex-col sticky top-0 h-screen shadow-[4px_0px_0px_#0d0d11] z-30">
+        <div className="px-4 h-16 flex items-center gap-3 border-b-[2.5px] border-[#0d0d11] bg-[#1d171b]">
+          <div className="grid place-items-center h-9 w-9 rounded-xl bg-[#faf6f0] border-[2px] border-[#0d0d11] shadow-[2px_2px_0px_#0d0d11]">
+            <ShieldAlert size={18} className="text-[var(--torii-vermilion)]" />
           </div>
           <div className="leading-tight">
-            <div className="text-[0.9rem] font-semibold text-[var(--text-main)] tracking-tight">Rashomon</div>
-            <div className="text-[0.6rem] text-[var(--text-muted)]">SOC Console</div>
+            <div className="text-[0.92rem] font-extrabold uppercase tracking-wider text-white">RASHOMON</div>
+            <div className="text-[0.64rem] font-mono font-bold text-[var(--torii-amber)]">SOC CONSOLE</div>
           </div>
         </div>
         <nav className="flex-1 overflow-y-auto py-2">
           {NAV.map((n) => {
-            const Icon = n.icon; const active = page === n.id;
+            const Icon = n.icon;
+            const active = page === n.id;
             return (
-              <button key={n.id} onClick={() => setPage(n.id)}
-                className={`w-full flex items-center gap-2.5 px-4 py-2 text-[0.8rem] transition-colors ${active ? 'bg-[var(--accent-soft)] text-[var(--text-main)] border-l-2 border-[var(--accent)]' : 'text-[var(--text-dim)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] border-l-2 border-transparent'}`}>
-                <Icon size={15} /> {n.label}
+              <button
+                key={n.id}
+                onClick={() => setPage(n.id)}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 text-[0.8rem] uppercase font-bold tracking-wide transition-all ${
+                  active
+                    ? 'bg-[var(--torii-vermilion)] text-white border-y-[1.5px] border-r-[2.5px] border-[#0d0d11] shadow-[2.5px_2.5px_0px_#0d0d11]'
+                    : 'text-[#c5bebe] hover:text-white hover:bg-[rgba(255,255,255,0.06)]'
+                }`}
+              >
+                <Icon size={16} /> {n.label}
               </button>
             );
           })}
         </nav>
-        <button onClick={ctx.onBackToLanding} className="m-3 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-[0.76rem] text-[var(--text-dim)] border border-[var(--border)] hover:text-[var(--text-main)] hover:border-[var(--border-strong)]">
+        <button
+          onClick={ctx.onBackToLanding}
+          className="m-3 flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl text-[0.74rem] font-extrabold uppercase tracking-wider bg-[#faf6f0] text-[#0d0d11] border-[2px] border-[#0d0d11] shadow-[2.5px_2.5px_0px_#0d0d11] hover:bg-white active:translate-x-[1px] active:translate-y-[1px] transition-all cursor-pointer"
+        >
           <ArrowLeft size={14} /> Back to site
         </button>
       </aside>
 
       {/* Main column */}
       <div className="flex-1 min-w-0 flex flex-col">
-        {/* Top bar */}
-        <header className="h-14 shrink-0 border-b border-[var(--border)] bg-[rgba(16,21,30,0.72)] backdrop-blur-xl px-5 flex items-center gap-4 sticky top-0 z-20">
-          <div className="text-[0.9rem] font-semibold text-[var(--text-main)]">{NAV.find(n => n.id === page)?.label}</div>
+        {/* Neobrutalist Top bar */}
+        <header className="h-16 shrink-0 border-b-[3px] border-[#0d0d11] bg-[rgba(26,21,24,0.96)] px-6 flex items-center gap-4 sticky top-0 z-20 shadow-[0_4px_0px_#0d0d11]">
+          <div className="text-[1rem] font-extrabold uppercase tracking-wider text-white">
+            {NAV.find((n) => n.id === page)?.label}
+          </div>
           <div className="flex-1 max-w-sm relative hidden md:block">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-            <input disabled placeholder="Search incidents, IPs, threat IDs…"
-              className="w-full pl-8 pr-3 py-1.5 rounded-md bg-[var(--bg-inset)] border border-[var(--border)] text-[0.76rem] text-[var(--text-dim)] placeholder:text-[var(--text-muted)] cursor-not-allowed"
-              title="Search is not yet backed by an API endpoint" />
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#544d49]" />
+            <input
+              disabled
+              placeholder="Search incidents, IPs, threat IDs..."
+              className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-[#faf6f0] border-[2px] border-[#0d0d11] shadow-[2px_2px_0px_#0d0d11] text-[0.78rem] text-[#0d0d11] placeholder:text-[#706764] font-mono font-medium cursor-not-allowed"
+              title="Search is not yet backed by an API endpoint"
+            />
           </div>
           <div className="ml-auto flex items-center gap-3">
             <Badge tone={live ? 'success' : 'warning'}>
-              <Radio size={11} /> {live ? 'LIVE' : 'TEST / REPLAY'}
+              <Radio size={12} /> {live ? 'LIVE' : 'TEST / REPLAY'}
             </Badge>
             <Badge tone={connected ? 'success' : 'danger'}>
-              <span className="h-1.5 w-1.5 rounded-full" style={{ background: connected ? 'var(--success)' : 'var(--danger)' }} />
-              {connected ? 'Connected' : 'Offline'}
+              <span
+                className="h-2 w-2 rounded-full border border-[#0d0d11]"
+                style={{ background: connected ? 'var(--torii-sage)' : 'var(--torii-vermilion)' }}
+              />
+              {connected ? 'CONNECTED' : 'OFFLINE'}
             </Badge>
-            <div className="relative text-[var(--text-dim)]" title={`${openIncidents} open incident(s)`}>
-              <Bell size={17} />
-              {openIncidents > 0 && <span className="absolute -top-1.5 -right-1.5 h-4 min-w-4 px-1 grid place-items-center rounded-full text-[0.6rem] font-bold text-white" style={{ background: 'var(--danger)' }}>{openIncidents}</span>}
+            <div
+              className="relative text-white p-2 rounded-xl bg-[#faf6f0] border-[2px] border-[#0d0d11] shadow-[2px_2px_0px_#0d0d11] cursor-pointer"
+              title={`${openIncidents} open incident(s)`}
+            >
+              <Bell size={16} className="text-[#0d0d11]" />
+              {openIncidents > 0 && (
+                <span
+                  className="absolute -top-1.5 -right-1.5 h-5 min-w-5 px-1 grid place-items-center rounded-full text-[0.62rem] font-mono font-extrabold text-white border border-[#0d0d11] shadow-[1px_1px_0px_#0d0d11]"
+                  style={{ background: 'var(--torii-vermilion)' }}
+                >
+                  {openIncidents}
+                </span>
+              )}
             </div>
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-5">{render()}</main>
+        <main className="flex-1 overflow-y-auto p-6">{render()}</main>
       </div>
 
       {/* Incident forensic detail — opened from any page via ctx.openIncident */}
