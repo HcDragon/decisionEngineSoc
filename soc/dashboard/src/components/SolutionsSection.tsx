@@ -1,5 +1,5 @@
-import React from 'react';
-import { Shield, Lock, FileSearch, AlertOctagon, Terminal } from 'lucide-react';
+﻿import React from 'react';
+import { Shield, Lock, FileSearch, AlertOctagon } from 'lucide-react';
 
 interface SolutionsSectionProps {
   onOpenConsole: () => void;
@@ -9,46 +9,50 @@ export const SolutionsSection: React.FC<SolutionsSectionProps> = ({ onOpenConsol
   const solutions = [
     {
       icon: AlertOctagon,
-      title: 'syn flood & ddos defense',
-      desc: 'detects asymmetric packet ratios, half-open tcp socket flooding, and automated hping3 volumetric spikes before service degradation occurs.',
+      title: 'SYN Flood & DDoS Defense',
+      desc: 'Detects asymmetric packet ratios, half-open TCP socket flooding, and automated hping3 volumetric spikes before service degradation occurs.',
       tags: ['asymmetric ratio', 'pcap rate-rules', 'nft instant-drop'],
-      badge: 'critical tier'
+      badge: 'Critical Tier',
+      badgeTone: 'bg-[var(--torii-vermilion)] text-white',
     },
     {
       icon: Lock,
-      title: 'brute-force credential protection',
-      desc: 'correlates burst login failures, dictionary sweeps, and automated hydra attacks across http/ssh endpoints with automatic source ip containment.',
+      title: 'Brute-Force Credential Protection',
+      desc: 'Correlates burst login failures, dictionary sweeps, and automated hydra attacks across HTTP/SSH endpoints with automatic source IP containment.',
       tags: ['frequency burst', 'fail2ban parity', 'virtual firewall'],
-      badge: 'high tier'
+      badge: 'High Tier',
+      badgeTone: 'bg-[var(--torii-amber)] text-[#0d0d11]',
     },
     {
       icon: FileSearch,
-      title: 'reconnaissance & port scan evasion',
-      desc: 'identifies horizontal network sweeps, syn stealth probes, and nmap host discovery before attackers can map internal service topologies.',
+      title: 'Reconnaissance & Port Scan Evasion',
+      desc: 'Identifies horizontal network sweeps, SYN stealth probes, and Nmap host discovery before attackers can map internal service topologies.',
       tags: ['flow fan-out', 'port entropy', 'stealth detection'],
-      badge: 'medium tier'
+      badge: 'Medium Tier',
+      badgeTone: 'bg-[#faf6f0] text-[#0d0d11]',
     },
     {
       icon: Shield,
-      title: 'cryptographic audit & governance',
-      desc: 'every automated decision, risk score, and firewall action is cryptographically hash-chained (sha-256) for auditability and compliance verification.',
+      title: 'Cryptographic Audit & Governance',
+      desc: 'Every automated decision, risk score, and firewall action is cryptographically hash-chained (SHA-256) for auditability and compliance verification.',
       tags: ['tamper-proof', 'sha-256 chain', 'verifiable ledger'],
-      badge: 'compliance ready'
-    }
+      badge: 'Compliance Ready',
+      badgeTone: 'bg-[var(--torii-sage)] text-white',
+    },
   ];
 
   return (
-    <section id="solutions" className="relative w-full py-24 px-6 md:px-12 bg-transparent border-t border-white/10">
+    <section id="solutions" className="relative w-full py-24 px-6 md:px-12 bg-transparent border-t-[3px] border-[#0d0d11]">
       <div className="max-w-7xl mx-auto">
         <div className="text-center max-w-3xl mx-auto mb-16">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/40 border border-white/10 backdrop-blur-xl text-xs text-neutral-300 font-mono tracking-wide uppercase mb-4">
-            threat prevention solutions
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[var(--torii-amber)] border-[2px] border-[#0d0d11] shadow-[2.5px_2.5px_0px_#0d0d11] text-xs text-[#0d0d11] font-mono font-bold tracking-wider uppercase mb-4">
+            Threat Prevention Solutions
           </div>
-          <h2 className="text-3xl md:text-5xl font-medium tracking-tight text-white">
-            protecting modern cloud workloads against active attack scenarios
+          <h2 className="text-3xl md:text-5xl font-extrabold tracking-tight uppercase text-white drop-shadow-[2px_2px_0px_#0d0d11]">
+            Protecting Modern Cloud Workloads Against Active Attack Scenarios
           </h2>
-          <p className="text-neutral-300/80 text-sm md:text-base mt-4">
-            battle-tested in isolated network namespaces with realistic attack scenarios and zero-friction analyst control.
+          <p className="text-[#c5bebe] text-sm md:text-base mt-4 font-medium">
+            Battle-tested in isolated network namespaces with realistic attack scenarios and zero-friction analyst control.
           </p>
         </div>
 
@@ -58,29 +62,29 @@ export const SolutionsSection: React.FC<SolutionsSectionProps> = ({ onOpenConsol
             return (
               <div
                 key={s.title}
-                className="bg-black/40 border border-white/10 backdrop-blur-2xl rounded-3xl p-8 hover:border-white/25 transition-all hover:bg-black/50 group shadow-[0_8px_32px_0_rgba(0,0,0,0.45)]"
+                className="bg-[rgba(26,21,24,0.94)] border-[2.5px] border-[#0d0d11] shadow-[5px_5px_0px_#0d0d11] rounded-3xl p-8 hover:-translate-y-1 hover:shadow-[7px_7px_0px_#0d0d11] transition-all group"
               >
                 <div className="flex items-center justify-between mb-6">
-                  <div className="h-12 w-12 rounded-2xl bg-white/[0.08] border border-white/10 backdrop-blur-xl flex items-center justify-center text-white group-hover:scale-105 transition-transform">
-                    <Icon className="h-6 w-6 text-neutral-200" />
+                  <div className="h-12 w-12 rounded-2xl bg-[#faf6f0] border-[2px] border-[#0d0d11] shadow-[2.5px_2.5px_0px_#0d0d11] flex items-center justify-center text-[#0d0d11] group-hover:scale-105 transition-transform">
+                    <Icon className="h-6 w-6 text-[var(--torii-vermilion)]" />
                   </div>
-                  <span className="text-[11px] font-mono uppercase px-3 py-1 rounded-full bg-white/[0.06] border border-white/10 text-neutral-300 backdrop-blur-md">
+                  <span className={`text-[11px] font-mono font-bold uppercase tracking-wider px-3 py-1 rounded-md border-[1.5px] border-[#0d0d11] shadow-[2px_2px_0px_#0d0d11] ${s.badgeTone}`}>
                     {s.badge}
                   </span>
                 </div>
 
-                <h3 className="text-xl font-medium text-white tracking-tight">
+                <h3 className="text-xl font-bold text-white tracking-tight uppercase">
                   {s.title}
                 </h3>
-                <p className="text-neutral-300/80 text-sm mt-3 leading-relaxed">
+                <p className="text-[#c5bebe] text-sm mt-3 leading-relaxed font-medium">
                   {s.desc}
                 </p>
 
-                <div className="mt-6 pt-6 border-t border-white/10 flex flex-wrap gap-2">
+                <div className="mt-6 pt-6 border-t-[2px] border-[#0d0d11] flex flex-wrap gap-2">
                   {s.tags.map((t) => (
                     <span
                       key={t}
-                      className="text-xs text-neutral-300 bg-white/[0.05] px-3 py-1 rounded-full border border-white/10 backdrop-blur-sm"
+                      className="text-[11px] font-mono font-bold uppercase tracking-wider px-3 py-1 rounded-md bg-[#faf6f0] border-[1.5px] border-[#0d0d11] shadow-[1.5px_1.5px_0px_#0d0d11] text-[#0d0d11]"
                     >
                       {t}
                     </span>
@@ -89,28 +93,6 @@ export const SolutionsSection: React.FC<SolutionsSectionProps> = ({ onOpenConsol
               </div>
             );
           })}
-        </div>
-
-        {/* Lab Demonstration Banner */}
-        <div className="mt-12 bg-black/50 border border-white/10 backdrop-blur-2xl rounded-3xl p-8 flex flex-col md:flex-row items-center justify-between gap-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.45)]">
-          <div className="flex items-center gap-4">
-            <div className="h-12 w-12 rounded-2xl bg-white/10 border border-white/15 backdrop-blur-xl flex items-center justify-center text-white">
-              <Terminal className="h-6 w-6" />
-            </div>
-            <div>
-              <h4 className="text-white text-base font-medium">ready to run attack &amp; defence lab?</h4>
-              <p className="text-neutral-300/80 text-xs mt-1">
-                execute brute-force, syn-flood, or recon-scan inside isolated netns and verify automatic containment.
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onOpenConsole}
-            className="bg-white text-black text-xs font-semibold px-6 py-3 rounded-full hover:bg-neutral-200 transition-colors whitespace-nowrap cursor-pointer shadow-lg"
-          >
-            open soc operations console
-          </button>
         </div>
       </div>
     </section>

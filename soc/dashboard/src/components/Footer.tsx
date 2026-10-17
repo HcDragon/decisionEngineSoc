@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 
 interface FooterProps {
   onOpenConsole: () => void;
@@ -6,10 +6,10 @@ interface FooterProps {
 
 export const Footer: React.FC<FooterProps> = ({ onOpenConsole }) => {
   return (
-    <footer className="w-full bg-black/60 backdrop-blur-2xl border-t border-white/10 py-16 px-6 md:px-12 text-neutral-400 text-xs shadow-[0_8px_32px_0_rgba(0,0,0,0.37)]">
+    <footer className="w-full bg-[rgba(20,16,19,0.96)] border-t-[3px] border-[#0d0d11] py-14 px-6 md:px-12 text-[#c5bebe] text-xs">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-8">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-white/[0.08] border border-white/10 rounded-full px-4 py-2 backdrop-blur-md">
+        <div className="flex items-center gap-3.5">
+          <div className="flex items-center gap-2.5 bg-[#faf6f0] text-[#0d0d11] border-[2px] border-[#0d0d11] shadow-[2.5px_2.5px_0px_#0d0d11] rounded-full px-4 py-1.5 font-bold">
             <svg
               className="h-4 w-4"
               viewBox="0 0 256 256"
@@ -18,27 +18,27 @@ export const Footer: React.FC<FooterProps> = ({ onOpenConsole }) => {
             >
               <path
                 d="M 128 192 L 128 256 L 64.5 256 L 32 223 L 0 192 L 0 128 L 64 128 Z M 256 192 L 256 256 L 192.5 256 L 160 223 L 128 192 L 128 128 L 192 128 Z M 128 64 L 128 128 L 64.5 128 L 32 95 L 0 64 L 0 0 L 64 0 Z M 256 64 L 256 128 L 192.5 128 L 160 95 L 128 64 L 128 0 L 192 0 Z"
-                fill="#ffffff"
+                fill="#0d0d11"
               />
             </svg>
-            <span className="text-white text-xs font-medium tracking-tight">roshomon</span>
+            <span className="text-[#0d0d11] text-xs font-mono font-extrabold tracking-wider uppercase">RASHOMON</span>
           </div>
-          <span>autonomous data-security &amp; smart soc manager</span>
+          <span className="font-medium text-[#c5bebe]">Autonomous Data-Security &amp; Smart SOC Manager</span>
         </div>
 
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-6 font-bold uppercase tracking-wider font-mono text-[11px]">
           <a href="#platform" className="hover:text-white transition-colors">
-            platform
+            Platform
           </a>
           <a href="#solutions" className="hover:text-white transition-colors">
-            solutions
+            Solutions
           </a>
           <button
             type="button"
             onClick={onOpenConsole}
-            className="hover:text-white transition-colors cursor-pointer"
+            className="hover:text-white transition-colors cursor-pointer border-none bg-transparent font-bold uppercase tracking-wider font-mono text-[11px] text-[#c5bebe]"
           >
-            soc console
+            SOC Console
           </button>
           <a
             href="https://github.com"
@@ -46,12 +46,12 @@ export const Footer: React.FC<FooterProps> = ({ onOpenConsole }) => {
             rel="noreferrer"
             className="hover:text-white transition-colors"
           >
-            docs &amp; lab guide
+            Docs &amp; Guide
           </a>
         </div>
 
-        <div className="text-neutral-500">
-          © 2026 roshomon. all rights reserved.
+        <div className="text-[#8c8385] font-mono text-[11px]">
+          &copy; 2026 RASHOMON. All Rights Reserved.
         </div>
       </div>
     </footer>

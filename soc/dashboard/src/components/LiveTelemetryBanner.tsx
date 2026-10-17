@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { Activity, ShieldCheck, AlertTriangle, Radio, ArrowRight } from 'lucide-react';
 
 interface LiveTelemetryBannerProps {
@@ -35,79 +35,79 @@ export const LiveTelemetryBanner: React.FC<LiveTelemetryBannerProps> = ({
       : '0.0';
 
   return (
-    <div className="w-full bg-white/[0.07] border-y border-white/15 backdrop-blur-2xl px-4 sm:px-8 py-5 shadow-[0_4px_24px_0_rgba(0,0,0,0.22)]">
+    <div className="w-full bg-[rgba(26,21,24,0.96)] border-y-[3px] border-[#0d0d11] shadow-[0_4px_0px_#0d0d11] px-4 sm:px-8 py-5">
       <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center justify-between gap-6">
         {/* Status & Engine Info */}
-        <div className="flex items-center gap-3">
-          <div className="relative flex h-3 w-3">
+        <div className="flex items-center gap-3.5">
+          <div className="relative flex h-3.5 w-3.5">
             <span
               className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                isHealthy ? 'bg-emerald-400' : 'bg-amber-400'
+                isHealthy ? 'bg-[var(--torii-sage)]' : 'bg-[var(--torii-amber)]'
               }`}
             />
             <span
-              className={`relative inline-flex rounded-full h-3 w-3 ${
-                isHealthy ? 'bg-emerald-500' : 'bg-amber-500'
+              className={`relative inline-flex rounded-full h-3.5 w-3.5 border border-[#0d0d11] ${
+                isHealthy ? 'bg-[var(--torii-sage)]' : 'bg-[var(--torii-amber)]'
               }`}
             />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <span className="text-white text-sm font-semibold tracking-tight">
-                autonomous soc telemetry
+            <div className="flex items-center gap-2.5">
+              <span className="text-white text-sm font-bold uppercase tracking-wider font-mono">
+                Autonomous SOC Telemetry
               </span>
               <span
-                className={`text-[11px] px-2 py-0.5 rounded-full uppercase font-medium tracking-wide border backdrop-blur-md ${
+                className={`text-[10px] px-2.5 py-0.5 rounded-md uppercase font-extrabold tracking-wider border-[1.5px] border-[#0d0d11] shadow-[1.5px_1.5px_0px_#0d0d11] ${
                   isHealthy
-                    ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
-                    : 'bg-amber-500/20 border-amber-500/40 text-amber-300'
+                    ? 'bg-[var(--torii-sage)] text-white'
+                    : 'bg-[var(--torii-amber)] text-[#0d0d11]'
                 }`}
               >
-                {isHealthy ? 'live & active' : 'standby'}
+                {isHealthy ? 'LIVE & ACTIVE' : 'STANDBY'}
               </span>
             </div>
-            <p className="text-xs text-neutral-400 mt-0.5">
-              nfstream hardware tap · port {trafficStats.monitored_port} · mode:{' '}
-              <span className="text-neutral-200 uppercase">{automationMode}</span>
+            <p className="text-xs text-[#c5bebe] font-mono mt-1">
+              NFSTREAM TAP • PORT <span className="font-bold text-white">{trafficStats.monitored_port}</span> • MODE:{' '}
+              <span className="text-[var(--torii-amber)] uppercase font-bold">{automationMode}</span>
             </p>
           </div>
         </div>
 
-        {/* Live Metrics Quick Strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-6 w-full lg:w-auto">
-          <div className="bg-white/[0.04] border border-white/10 backdrop-blur-xl rounded-xl px-3.5 py-2.5">
-            <div className="text-[11px] text-neutral-400 flex items-center gap-1.5">
-              <Activity className="h-3 w-3 text-cyan-400" /> throughput
+        {/* Live Metrics Quick Strip — Tactile Neobrutalist Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 w-full lg:w-auto">
+          <div className="bg-[#faf6f0] text-[#0d0d11] border-[2.5px] border-[#0d0d11] shadow-[3.5px_3.5px_0px_#0d0d11] rounded-xl px-3.5 py-2.5 hover:-translate-y-0.5 transition-transform">
+            <div className="text-[10.5px] text-[#544d49] font-bold uppercase tracking-wider flex items-center gap-1.5 font-mono">
+              <Activity className="h-3.5 w-3.5 text-[var(--torii-vermilion)]" /> Throughput
             </div>
-            <div className="text-white text-lg font-medium mt-0.5 tracking-tight">
+            <div className="text-[#0d0d11] text-lg font-extrabold mt-0.5 font-mono">
               {trafficStats.current_packets_per_sec}{' '}
-              <span className="text-xs text-neutral-400 font-normal ml-1">pkts/s</span>
+              <span className="text-xs text-[#706764] font-bold font-sans">pkts/s</span>
             </div>
           </div>
 
-          <div className="bg-white/[0.04] border border-white/10 backdrop-blur-xl rounded-xl px-3.5 py-2.5">
-            <div className="text-[11px] text-neutral-400 flex items-center gap-1.5">
-              <Radio className="h-3 w-3 text-emerald-400" /> total flows
+          <div className="bg-[#faf6f0] text-[#0d0d11] border-[2.5px] border-[#0d0d11] shadow-[3.5px_3.5px_0px_#0d0d11] rounded-xl px-3.5 py-2.5 hover:-translate-y-0.5 transition-transform">
+            <div className="text-[10.5px] text-[#544d49] font-bold uppercase tracking-wider flex items-center gap-1.5 font-mono">
+              <Radio className="h-3.5 w-3.5 text-[var(--torii-sage)]" /> Total Flows
             </div>
-            <div className="text-white text-lg font-medium mt-0.5 tracking-tight">
+            <div className="text-[#0d0d11] text-lg font-extrabold mt-0.5 font-mono">
               {trafficStats.total_flows.toLocaleString()}
             </div>
           </div>
 
-          <div className="bg-white/[0.04] border border-white/10 backdrop-blur-xl rounded-xl px-3.5 py-2.5">
-            <div className="text-[11px] text-neutral-400 flex items-center gap-1.5">
-              <AlertTriangle className="h-3 w-3 text-rose-400" /> anomaly rate
+          <div className="bg-[#faf6f0] text-[#0d0d11] border-[2.5px] border-[#0d0d11] shadow-[3.5px_3.5px_0px_#0d0d11] rounded-xl px-3.5 py-2.5 hover:-translate-y-0.5 transition-transform">
+            <div className="text-[10.5px] text-[#544d49] font-bold uppercase tracking-wider flex items-center gap-1.5 font-mono">
+              <AlertTriangle className="h-3.5 w-3.5 text-[var(--torii-amber)]" /> Anomaly Rate
             </div>
-            <div className="text-white text-lg font-medium mt-0.5 tracking-tight">
+            <div className="text-[#0d0d11] text-lg font-extrabold mt-0.5 font-mono">
               {threatPct}%
             </div>
           </div>
 
-          <div className="bg-white/[0.04] border border-white/10 backdrop-blur-xl rounded-xl px-3.5 py-2.5">
-            <div className="text-[11px] text-neutral-400 flex items-center gap-1.5">
-              <ShieldCheck className="h-3 w-3 text-purple-400" /> active blocks
+          <div className="bg-[#faf6f0] text-[#0d0d11] border-[2.5px] border-[#0d0d11] shadow-[3.5px_3.5px_0px_#0d0d11] rounded-xl px-3.5 py-2.5 hover:-translate-y-0.5 transition-transform">
+            <div className="text-[10.5px] text-[#544d49] font-bold uppercase tracking-wider flex items-center gap-1.5 font-mono">
+              <ShieldCheck className="h-3.5 w-3.5 text-[var(--torii-crimson)]" /> Active Blocks
             </div>
-            <div className="text-white text-lg font-medium mt-0.5 tracking-tight">
+            <div className="text-[#0d0d11] text-lg font-extrabold mt-0.5 font-mono">
               {overview?.stats?.active_blocks ?? 0}
             </div>
           </div>
@@ -117,10 +117,10 @@ export const LiveTelemetryBanner: React.FC<LiveTelemetryBannerProps> = ({
         <button
           type="button"
           onClick={onOpenConsole}
-          className="w-full lg:w-auto inline-flex items-center justify-center gap-2 bg-white text-black hover:bg-neutral-200 transition-colors text-xs font-semibold px-5 py-2.5 rounded-full cursor-pointer shadow-lg shadow-white/5 whitespace-nowrap"
+          className="w-full lg:w-auto inline-flex items-center justify-center gap-2 bg-[var(--torii-vermilion)] text-white hover:bg-[var(--torii-vermilion-hover)] text-xs font-extrabold uppercase tracking-wider px-6 py-3 rounded-full border-[2.5px] border-[#0d0d11] shadow-[3.5px_3.5px_0px_#0d0d11] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0px_#0d0d11] cursor-pointer transition-all whitespace-nowrap"
         >
-          <span>open live soc console</span>
-          <ArrowRight className="h-3.5 w-3.5" />
+          <span>Open Live SOC Console</span>
+          <ArrowRight className="h-4 w-4" />
         </button>
       </div>
     </div>
