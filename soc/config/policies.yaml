@@ -18,6 +18,14 @@ tiers:
   high: 60
   critical: 80
 
+# Optional: target time from flow capture to decision persisted, per tier, in ms.
+# The dashboard's "Decision latency" panel draws bars against these when set.
+# decision_latency_targets_ms:
+#   critical: 1000
+#   high: 2000
+#   medium: 5000
+#   low: 10000
+
 correlation:
   window_s: 60
   key:

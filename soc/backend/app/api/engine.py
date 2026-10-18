@@ -422,4 +422,5 @@ async def policy_info():
             {"id": r.id, "priority": r.priority, "mode": r.mode, "playbook": r.playbook}
             for r in p.rules
         ],
+        "decision_latency_targets_ms": p.decision_latency_targets_ms,
     }

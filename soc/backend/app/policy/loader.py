@@ -98,6 +98,8 @@ class PolicyBundle:
     intel: Dict[str, IntelEntry]
     playbooks: Dict[str, Dict[str, Any]]
     policy_hash: str
+    # Optional per-tier SLA for capture -> decision latency, shown by the dashboard.
+    decision_latency_targets_ms: Dict[str, int] = field(default_factory=dict)
 
     # ---- convenience lookups -------------------------------------------------
     def family_for_label(self, label: str) -> Optional[str]:
@@ -175,6 +177,12 @@ def load_policy_bundle(config_dir: Optional[Path] = None) -> PolicyBundle:
 
     # ---- tiers --------------------------------------------------------------
     tiers = {str(k): float(v) for k, v in policies["tiers"].items()}
+
+    # ---- optional decision-latency targets (dashboard SLA bars) --------------
+    latency_targets = {
+        str(k).lower(): int(v)
+        for k, v in (policies.get("decision_latency_targets_ms") or {}).items()
+    }
 
     # ---- correlation --------------------------------------------------------
     corr = policies.get("correlation", {})
@@ -274,6 +282,7 @@ def load_policy_bundle(config_dir: Optional[Path] = None) -> PolicyBundle:
         intel=intel,
         playbooks=playbooks,
         policy_hash=policy_hash,
+        decision_latency_targets_ms=latency_targets,
     )
 
 

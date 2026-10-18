@@ -1,0 +1,214 @@
+/*
+ * Rashomon landing page. Paper tones, hairline structure, one muted accent.
+ * No shadows, gradients or motion beyond 120ms hover transitions.
+ */
+
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 400 600; font-display: swap; src: url('../assets/fonts/ibm-plex-sans-latin-var.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url('../assets/fonts/ibm-plex-mono-latin-400.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url('../assets/fonts/ibm-plex-mono-latin-500.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Serif'; font-style: normal; font-weight: 400; font-display: swap; src: url('../assets/fonts/ibm-plex-serif-latin-400.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Serif'; font-style: normal; font-weight: 500; font-display: swap; src: url('../assets/fonts/ibm-plex-serif-latin-500.woff2') format('woff2'); }
+
+.lp {
+  --bg: #F3F0E9;
+  --surface: #FFFFFF;
+  --ink: #1C1B19;
+  --muted: #6B6660;
+  --line: #E3DED3;
+  --line-strong: #CFC8BA;     /* connectors: a touch darker than card hairlines so the spine reads */
+  --accent: #B5533F;
+  --accent-ink: #A44836;      /* accent used as small text (contrast on paper) */
+  --accent-tint: #F1DCD6;
+  --sans: 'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif;
+  --serif: 'IBM Plex Serif', Georgia, 'Times New Roman', serif;
+  --mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  --hover: 120ms ease;
+  --wrap: 1120px;
+
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+.lp *, .lp *::before, .lp *::after { box-sizing: border-box; }
+.lp :where(h1, h2, h3, p, ul, ol, li, dl, dd, figure) { margin: 0; padding: 0; }
+.lp :where(ul, ol) { list-style: none; }
+.lp :where(a) { color: inherit; text-decoration: none; }
+.lp :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.lp-mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.lp-wrap { width: 100%; max-width: var(--wrap); margin: 0 auto; padding: 0 32px; }
+@media (max-width: 560px) { .lp-wrap { padding: 0 20px; } }
+
+/* ------------------------------------------------------------- buttons */
+.lp-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 44px; padding: 0 20px; border-radius: 3px;
+  font: 500 15px/1 var(--sans); letter-spacing: 0.01em;
+  border: 1px solid var(--accent); cursor: pointer;
+  transition: background-color var(--hover), border-color var(--hover), color var(--hover);
+}
+.lp-btn--solid { background: var(--accent); color: #FFFFFF; }
+.lp-btn--solid:hover { background: #A2493A; border-color: #A2493A; }
+.lp-btn--line { background: transparent; color: var(--ink); border-color: var(--line-strong); }
+.lp-btn--line:hover { border-color: var(--ink); }
+
+/* ------------------------------------------------------------- nav */
+.lp-nav { border-bottom: 1px solid var(--line); }
+.lp-nav .lp-wrap { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 72px; flex-wrap: wrap; }
+.lp-brand { display: inline-flex; align-items: center; gap: 12px; color: var(--accent); }
+.lp-wordmark { font: 500 15px/1 var(--sans); letter-spacing: 0.24em; color: var(--ink); }
+.lp-links { display: flex; align-items: center; gap: 28px; flex-wrap: wrap; }
+.lp-link { font-size: 15px; color: var(--muted); transition: color var(--hover); }
+.lp-link:hover { color: var(--ink); }
+@media (max-width: 640px) { .lp-links .lp-link { display: none; } }
+
+/* ------------------------------------------------------------- hero */
+.lp-hero { padding: 120px 0 0; border-bottom: 1px solid var(--line); }
+.lp-hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) 160px; gap: 48px; align-items: start; }
+.lp-eyebrow { font: 500 12px/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent-ink); }
+.lp-h1 {
+  margin-top: 28px; max-width: 17ch;
+  font: 400 clamp(36px, 5vw, 54px)/1.14 var(--serif); letter-spacing: -0.01em; color: var(--ink);
+}
+.lp-lede { margin-top: 28px; max-width: 58ch; font-size: 18px; line-height: 1.7; color: var(--muted); }
+.lp-actions { margin-top: 44px; display: flex; flex-wrap: wrap; gap: 14px; }
+.lp-hero-mark { color: var(--accent); padding-top: 64px; justify-self: end; display: flex; flex-direction: column; align-items: center; gap: 28px; }
+/* hanko-style seal: outlined, never filled, so it stays quiet */
+.lp-seal {
+  writing-mode: vertical-rl; letter-spacing: 0.18em;
+  font: 500 15px/1 'Noto Serif CJK JP', 'Hiragino Mincho ProN', 'Yu Mincho', var(--serif);
+  color: var(--accent); border: 1px solid var(--accent); border-radius: 2px; padding: 9px 6px 7px;
+}
+/* the pipeline in one line, closing the hero */
+.lp-strip {
+  margin-top: 88px; padding: 16px 0; border-top: 1px solid var(--line);
+  display: flex; flex-wrap: wrap; gap: 6px 0;
+  font: 400 12px/1.6 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted);
+}
+.lp-strip-arrow { color: var(--line-strong); margin: 0 14px; letter-spacing: 0; }
+@media (max-width: 760px) {
+  .lp-hero { padding: 72px 0 0; }
+  .lp-strip { margin-top: 64px; }
+  .lp-strip-arrow { margin: 0 8px; }
+  .lp-hero-grid { grid-template-columns: 1fr; }
+  .lp-hero-mark { display: none; }
+}
+
+/* ------------------------------------------------------------- section shell */
+.lp-section { padding: 112px 0; border-bottom: 1px solid var(--line); }
+.lp-section-head { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 32px; margin-bottom: 72px; }
+.lp-section-label { font: 500 12px/1.6 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); padding-top: 6px; }
+.lp-section-label::before { content: ''; display: inline-block; width: 18px; height: 1px; margin-right: 10px; vertical-align: middle; background: var(--accent); }
+.lp-h2 { font: 500 26px/1.35 var(--sans); letter-spacing: -0.005em; max-width: 30ch; }
+.lp-section-intro { margin-top: 16px; max-width: 60ch; color: var(--muted); }
+@media (max-width: 760px) {
+  .lp-section { padding: 80px 0; }
+  .lp-section-head { grid-template-columns: 1fr; gap: 12px; margin-bottom: 48px; }
+}
+
+/* ------------------------------------------------------------- pipeline */
+.lp-pipe { --node: 360px; display: flex; flex-direction: column; align-items: center; }
+.lp-node {
+  position: relative;
+  width: min(var(--node), 100%);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 3px;
+  padding: 18px 22px; transition: border-color var(--hover);
+}
+.lp-node:hover { border-color: var(--line-strong); }
+.lp-node-step { position: absolute; top: 16px; right: 18px; font: 400 11px/1 var(--mono); letter-spacing: 0.08em; color: #ADA597; transition: color var(--hover); }
+.lp-node:hover .lp-node-step { color: var(--accent); }
+.lp-node-name { font-size: 16px; font-weight: 500; line-height: 1.4; padding-right: 36px; }
+.lp-node-sub { margin-top: 4px; font: 400 13px/1.5 var(--mono); color: var(--muted); }
+.lp-node-text { margin-top: 10px; font-size: 14px; line-height: 1.6; color: var(--muted); }
+
+/* straight spine segment with a small open chevron at its foot */
+.lp-wire { position: relative; width: 1px; height: 44px; background: var(--line-strong); }
+.lp-wire::after {
+  content: ''; position: absolute; left: -3.5px; bottom: 1px;
+  width: 7px; height: 7px; border-right: 1px solid var(--line-strong); border-bottom: 1px solid var(--line-strong);
+  transform: rotate(45deg);
+}
+
+/* spine segments that replace the fork/merge graphic once the detectors stack */
+.lp-narrow-only { display: none; }
+
+/* split into the two detectors and merge back */
+.lp-fork { width: 100%; max-width: 760px; height: 44px; display: block; overflow: visible; }
+.lp-fork path { fill: none; stroke: var(--line-strong); stroke-width: 1; vector-effect: non-scaling-stroke; }
+/* no grid gap: each card is centred in its half, so its centre sits exactly on the fork's 25% / 75% drops */
+.lp-pair { width: 100%; max-width: 760px; display: grid; grid-template-columns: 1fr 1fr; }
+.lp-pair .lp-node { width: calc(100% - 20px); justify-self: center; }
+
+/* playbook row: spine card plus a dashed branch to the containment note */
+.lp-branch-row { position: relative; width: 100%; display: flex; justify-content: center; }
+.lp-branch {
+  position: absolute; left: calc(50% + min(var(--node), 100%) / 2); top: 50%; transform: translateY(-50%);
+  display: flex; align-items: center; gap: 0;
+}
+.lp-branch-line { width: 48px; border-top: 1px dashed var(--line-strong); }
+.lp-note {
+  width: 220px; padding: 12px 16px; border: 1px dashed var(--line-strong); border-radius: 3px;
+  font-size: 13px; line-height: 1.55; color: var(--muted); background: transparent;
+}
+.lp-note strong { display: block; font-weight: 500; color: var(--ink); font-size: 14px; margin-bottom: 2px; }
+
+.lp-pipe-foot { margin-top: 48px; max-width: 62ch; text-align: center; font-size: 14px; color: var(--muted); }
+
+@media (max-width: 1080px) {
+  /* not enough room beside the spine: the containment note drops under the playbook */
+  .lp-branch-row { flex-direction: column; align-items: center; }
+  .lp-branch { position: static; transform: none; flex-direction: column; margin-top: 0; }
+  .lp-branch-line { width: 0; height: 24px; border-top: 0; border-left: 1px dashed var(--line-strong); }
+  .lp-note { width: min(var(--node), 100%); }
+}
+@media (max-width: 640px) {
+  .lp-fork { display: none; }
+  .lp-pair { grid-template-columns: 1fr; justify-items: center; }
+  .lp-pair .lp-node { width: min(var(--node), 100%); }
+  .lp-narrow-only { display: block; }
+}
+
+/* ------------------------------------------------------------- coverage */
+.lp-cov { border-top: 1px solid var(--line); }
+.lp-cov-row {
+  display: grid; grid-template-columns: 180px minmax(0, 1.25fr) 170px minmax(0, 1fr); gap: 28px;
+  padding: 24px 0; border-bottom: 1px solid var(--line); align-items: baseline;
+}
+.lp-cov-head { padding: 14px 0; font: 500 12px/1.5 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.lp-cov-family { font-weight: 500; }
+.lp-cov-text { font-size: 15px; color: var(--muted); }
+.lp-cov-rule { font-size: 14px; display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
+.lp-cov-mode { font-size: 12px; padding: 1px 8px; border-radius: 2px; border: 1px solid var(--line-strong); color: var(--muted); }
+.lp-cov-mode--auto { border-color: var(--accent-tint); background: var(--accent-tint); color: var(--accent-ink); }
+.lp-cov-k { display: none; }
+.lp-cov-note { margin-top: 32px; max-width: 72ch; font-size: 14px; color: var(--muted); }
+.lp-cov-note em { font-style: normal; color: var(--ink); }
+@media (max-width: 860px) {
+  .lp-cov-head { display: none; }
+  .lp-cov-row { grid-template-columns: 1fr; gap: 10px; }
+  .lp-cov-k { display: block; font: 500 11px/1.6 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  .lp-cov-rule { flex-direction: row; }
+  .lp-cov-rule .lp-cov-k { flex-basis: 100%; }
+}
+
+/* ------------------------------------------------------------- capabilities */
+.lp-caps { border-top: 1px solid var(--line); }
+.lp-cap { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 32px; padding: 26px 0; border-bottom: 1px solid var(--line); }
+.lp-cap-name { font-variant: small-caps; text-transform: lowercase; letter-spacing: 0.08em; font-size: 17px; font-weight: 500; color: var(--accent-ink); }
+.lp-cap-text { max-width: 62ch; color: var(--ink); }
+@media (max-width: 760px) { .lp-cap { grid-template-columns: 1fr; gap: 6px; } }
+
+/* ------------------------------------------------------------- footer */
+.lp-foot { padding: 64px 0 72px; }
+.lp-foot .lp-wrap { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 24px; }
+.lp-foot-id { display: flex; align-items: center; gap: 14px; color: var(--accent); }
+.lp-foot-line { font: 400 13px/1.5 var(--mono); color: var(--muted); }
+.lp-foot-links { display: flex; gap: 24px; font-size: 14px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .lp *, .lp *::before, .lp *::after { transition: none !important; }
+}
