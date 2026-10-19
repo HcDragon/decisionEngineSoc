@@ -1,0 +1,116 @@
+/*
+ * Console theme tokens. Scoped to .soc so the landing page (Tailwind) is untouched.
+ * Dark is the default; light via <html data-theme="light">; with no stored choice
+ * (no data-theme attribute) the console follows prefers-color-scheme.
+ */
+.soc {
+  --accent: #4A90D9;
+  /* Rashomon vermilion, shared with the landing page; used only for the logo mark */
+  --brand: #B5533F;
+  /* accent as text colour: #4A90D9 is only 3.0–3.3:1 on light surfaces, so light mode darkens it */
+  --accent-text: #4A90D9;
+  --font-sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  --radius: 8px;
+  --radius-sm: 6px;
+  --hover: 120ms ease;
+  --neutral: var(--muted);
+
+  color-scheme: dark;
+  --bg: #0E1217;
+  --side: #0B0F14;
+  --panel: #151B23;
+  --sub: #1B232D;
+  --line: #252E3A;
+  --line2: #1E2631;
+  --text: #E6EAF0;
+  --muted: #98A4B5;
+  --soft: #C3CCD8;
+  --track: #242D39;
+  --crit-fg: #FF9A9A;
+  --crit-bg: #3A1D22;
+  --high-fg: #FFB866;
+  --high-bg: #3A2A17;
+  --med-fg: #FFE066;
+  --med-bg: #36321A;
+  --low-fg: #9DB9D6;
+  --low-bg: #1A2A3A;
+  --st-pending: #74B9FF;
+  --st-investigating: #FFC857;
+  --st-escalated: #FF9A9A;
+  --st-contained: #7DD3A8;
+  --good: #7DD3A8;
+  --bad: #FFB866;
+  --chart-crit: #FF6B6B;
+  --chart-high: #FFA94D;
+  --chart-med: #FFE066;
+  --chart-low: #6F8FB0;
+}
+
+html[data-theme='light'] .soc {
+  color-scheme: light;
+  --accent-text: #2E6DB0;
+  --bg: #F3F5F8;
+  --side: #FFFFFF;
+  --panel: #FFFFFF;
+  --sub: #F1F4F8;
+  --line: #DCE2EA;
+  --line2: #E8ECF2;
+  --text: #1B2430;
+  --muted: #596678;
+  --soft: #3A4657;
+  --track: #E3E8EF;
+  --crit-fg: #B42318;
+  --crit-bg: #FDECEA;
+  --high-fg: #9A5200;
+  --high-bg: #FFF1E0;
+  --med-fg: #7A6000;
+  --med-bg: #FFF8D6;
+  --low-fg: #2D5F8F;
+  --low-bg: #E6F0FA;
+  --st-pending: #1F6FB8;
+  --st-investigating: #8A5A00;
+  --st-escalated: #B42318;
+  --st-contained: #1B7F4B;
+  --good: #1B7F4B;
+  --bad: #9A5200;
+  --chart-crit: #D92D20;
+  --chart-high: #F08A24;
+  --chart-med: #E5B800;
+  --chart-low: #6F8FB0;
+}
+
+@media (prefers-color-scheme: light) {
+  html:not([data-theme]) .soc {
+    color-scheme: light;
+    --accent-text: #2E6DB0;
+    --bg: #F3F5F8;
+    --side: #FFFFFF;
+    --panel: #FFFFFF;
+    --sub: #F1F4F8;
+    --line: #DCE2EA;
+    --line2: #E8ECF2;
+    --text: #1B2430;
+    --muted: #596678;
+    --soft: #3A4657;
+    --track: #E3E8EF;
+    --crit-fg: #B42318;
+    --crit-bg: #FDECEA;
+    --high-fg: #9A5200;
+    --high-bg: #FFF1E0;
+    --med-fg: #7A6000;
+    --med-bg: #FFF8D6;
+    --low-fg: #2D5F8F;
+    --low-bg: #E6F0FA;
+    --st-pending: #1F6FB8;
+    --st-investigating: #8A5A00;
+    --st-escalated: #B42318;
+    --st-contained: #1B7F4B;
+    --good: #1B7F4B;
+    --bad: #9A5200;
+    --chart-crit: #D92D20;
+    --chart-high: #F08A24;
+    --chart-med: #E5B800;
+    --chart-low: #6F8FB0;
+  }
+}

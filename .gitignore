@@ -59,6 +59,7 @@ ids_project/dataset/*.csv
 # Runtime pid files
 *.pid
 defend/.backend.pid
+*.restore
 
 # friend's model drop — 326MB, source artifact, never commit
 aiml.zip

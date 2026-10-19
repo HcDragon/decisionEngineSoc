@@ -1,0 +1,3 @@
+/* Document-level reset shared by the landing page and the console. */
+html, body { margin: 0; padding: 0; }
+body { min-height: 100vh; }
